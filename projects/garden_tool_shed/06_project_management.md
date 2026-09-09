@@ -11,6 +11,7 @@
 | ISSUE-005 | Confirm mower dimensions and compartment access | Measure the battery mower, define the practical compartment size and compare two external-door locations: long side near one end (current preference) versus short end wall. | Open |
 | ISSUE-006 | Confirm standing clearance | Determine the minimum internal clear height and door/access dimensions needed for comfortable adult entry and standing. | Open |
 | ISSUE-007 | Validate narrow-footprint layout | Check that an approximately 4.0 m × 1.2 m footprint can provide adequate storage and a practical access/standing zone. | Open |
+| ISSUE-008 | Define right-end shelf depth and main-door position | Determine what the right-end shelving must store, select a practical shelf depth, and compare a centred main entrance with a right-shifted entrance beginning after the shelf/access zone. | Open |
 
 ## Tasks
 
@@ -22,6 +23,7 @@
 | TASK-004 | Measure mower and compare access locations | TBD | TBD | TBD | Planned |
 | TASK-005 | Define human clearance target | TBD | TBD | TBD | Planned |
 | TASK-006 | Create first internal layout | TBD | TBD | TBD | Planned |
+| TASK-007 | Size right-end shelving and compare main-door positions | TBD | TBD | TBD | Planned |
 
 ## Milestones
 
