@@ -15,5 +15,6 @@
 | NEED-011 | Independent mower access | The mower compartment shall be accessible directly from outside without requiring access through the main storage area. | Confirmed |
 | NEED-012 | Roll mower without lifting | The battery mower should be rolled between ground level and its raised storage compartment without manual lifting. | Confirmed |
 | NEED-013 | Simple roof form | The shed shall use a mono-pitch roof. | Confirmed |
+| NEED-014 | Right-end shelving | The right short end wall should contain a shelving unit, and the main long-side door opening should be positioned so it does not conflict with the shelf depth. | Confirmed |
 
 The remaining needs shall be refined from site conditions, exact item dimensions, construction preferences and legal constraints before detailed design.
