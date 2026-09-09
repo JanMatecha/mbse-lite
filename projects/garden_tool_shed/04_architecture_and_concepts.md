@@ -15,7 +15,7 @@
 | PART-009 | Mono-pitch roof | Single-slope roof covering the shed. | Selected concept |
 | PART-010 | Mower external door | Dedicated external door/access opening for the enclosed mower compartment. | Selected concept |
 | PART-011 | Mower access ramp | Ramp connecting surrounding ground level to the raised mower-compartment floor. | Selected concept |
-| PART-012 | Right-end shelving unit | Shelving mounted or positioned along the right short end wall. Its depth will constrain the nearest edge of the main door opening. | Selected concept |
+| PART-012 | Right-end shelving unit | Shelving positioned along the right short end wall, intended mainly for small garden tools and supplies such as pots, seeds, gloves, pruning shears and pliers. Exact contents, depth and shelf arrangement are TBD. Its depth will constrain the nearest edge of the main door opening. | Selected concept |
 
 ## Concepts
 
@@ -43,4 +43,4 @@
 | DEC-005 | Select external mower access with ramp | Give the mower compartment its own external access and provide a ramp from the surrounding ground. | Allows the mower to be rolled directly into the raised compartment without lifting or entering the main storage area. | Accepted |
 | DEC-006 | Reserve right-end wall for shelving | Place a shelving unit on the right short end wall and keep the adjacent main-door edge clear of the shelf depth/access zone. | Preserves useful storage on the end wall while keeping the main entrance practical. | Accepted |
 
-The exact mower-door location and the exact main-door position are intentionally not decided yet. For the main entrance, `CON-009` (centred) and `CON-010` (right-shifted after the shelving) remain candidates, with `CON-010` currently preferred. The exact structural material, roof slope direction, door dimensions, shelf depth, mower-compartment dimensions, ramp geometry, internal clear height and storage-system details remain open for concept development.
+The exact mower-door location and the exact main-door position are intentionally not decided yet. For the main entrance, `CON-009` (centred) and `CON-010` (right-shifted after the shelving) remain candidates, with `CON-010` currently preferred. The exact structural material, roof slope direction, door dimensions, shelf depth, shelf spacing, mower-compartment dimensions, ramp geometry, internal clear height and remaining storage-system details remain open for concept development.
