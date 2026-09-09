@@ -25,7 +25,9 @@
 | CON-003 | Split internal storage layout | Divide the usable volume into a main tool-storage zone and a dedicated enclosed battery-mower compartment. | Selected |
 | CON-004 | Long-side double-leaf entrance | Use a two-leaf main door on a long side so a large opening can be created for access and natural daylight. | Selected |
 | CON-005 | Mono-pitch roof | Use a single-slope roof; exact slope direction and drainage side remain open. | Selected |
-| CON-006 | External mower bay with ramp | Access the enclosed mower compartment directly from outside and provide a ramp from ground level to the raised floor. Exact compartment side remains open. | Selected |
+| CON-006 | External mower bay with ramp | Access the enclosed mower compartment directly from outside and provide a ramp from ground level to the raised floor. | Selected |
+| CON-007 | Mower door at end of long side | Place the mower-compartment door on the long side, close to one end of the shed, with the ramp approaching from that side. | Preferred candidate |
+| CON-008 | Mower door in short end wall | Place the mower-compartment door in one short end wall, with the ramp aligned approximately with the 4 m longitudinal axis. | Candidate |
 
 ## Decisions
 
@@ -37,4 +39,4 @@
 | DEC-004 | Select mono-pitch roof | Use a mono-pitch roof. | Explicit user preference and a simple roof form for the elongated shed. | Accepted |
 | DEC-005 | Select external mower access with ramp | Give the mower compartment its own external access and provide a ramp from the surrounding ground. | Allows the mower to be rolled directly into the raised compartment without lifting or entering the main storage area. | Accepted |
 
-The exact structural material, roof slope direction, door dimensions, mower-compartment side and dimensions, ramp geometry, internal clear height and storage-system details remain open for concept development.
+The exact mower-door location is intentionally not decided yet. The current preference is `CON-007` on the long side near one end, while `CON-008` in the short end wall remains a meaningful alternative to compare. The exact structural material, roof slope direction, door dimensions, mower-compartment dimensions, ramp geometry, internal clear height and storage-system details remain open for concept development.
