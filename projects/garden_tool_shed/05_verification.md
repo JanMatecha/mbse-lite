@@ -8,3 +8,8 @@
 | VER-004 | Verify site compatibility | Measurement / drawing review | Final footprint and placement comply with confirmed site envelope and constraints. | Planned |
 | VER-005 | Verify ground-screw support concept | Design review / inspection | Final support design uses ground screws and does not require a permanent poured concrete slab or strip footing. | Planned |
 | VER-006 | Verify relocatability concept | Design review / demonstration planning | The shed can be released from the ground-screw support and a practical relocation procedure can be defined without demolition of a permanent concrete foundation. | Planned |
+| VER-007 | Verify inventory layout | Layout review / physical fit check | Representative long tools, small tools, flower pots, hoses, heavy hand tools and the mower can be accommodated in the intended arrangement. | Planned |
+| VER-008 | Verify target footprint | Drawing review / site measurement | Proposed external dimensions are approximately 4.0 m × 1.2 m and fit the confirmed site; final tolerance TBD. | Planned |
+| VER-009 | Verify standing clearance | Human-factors check / mock-up or measurement | An adult user can enter and stand upright inside without interference from the structure; exact minimum clear height TBD. | Planned |
+| VER-010 | Verify mower segregation | Inspection / design review | The battery lawn mower has a dedicated enclosed compartment physically separated from the main storage volume. | Planned |
+| VER-011 | Verify internal organization | Layout review / demonstration | Storage elements accommodate mixed-size items while preserving practical user access through the shed. | Planned |
