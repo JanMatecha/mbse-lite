@@ -5,7 +5,7 @@ from html import escape
 from pathlib import Path
 from typing import Iterable
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 
 OBJECT_PREFIXES = {
@@ -217,6 +217,54 @@ def export_xlsx(model: Model, output: str | Path) -> None:
     wb.save(output_path)
 
 
+def _markdown_cell(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).replace("\n", " ").replace("|", "&#124;").strip()
+
+
+def import_xlsx_to_markdown(input_file: str | Path, output_dir: str | Path) -> list[Path]:
+    """Convert an MBSE-lite XLSX export to normalized Markdown files for review.
+
+    This is deliberately a safe import: it never edits an existing Markdown project in place.
+    The generated directory should be reviewed before replacing source-of-truth files.
+    """
+    input_path = Path(input_file)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    wb = load_workbook(input_path, data_only=False)
+    written: list[Path] = []
+
+    for ws in wb.worksheets:
+        if ws.title == "Validation" or ws.max_row < 1:
+            continue
+        headers = [_markdown_cell(cell.value) for cell in ws[1]]
+        if not any(headers):
+            continue
+
+        drop = {"Type", "Source File"}
+        keep_indices = [i for i, header in enumerate(headers) if header and header not in drop]
+        kept_headers = [headers[i] for i in keep_indices]
+        if not kept_headers:
+            continue
+
+        rows: list[list[str]] = []
+        for excel_row in ws.iter_rows(min_row=2, values_only=True):
+            row = [_markdown_cell(excel_row[i]) for i in keep_indices]
+            if any(row):
+                rows.append(row)
+
+        file_name = "relations.md" if ws.title == "Relations" else f"{ws.title.lower().replace(' ', '_')}.md"
+        path = out / file_name
+        lines = [f"# {ws.title}", "", "| " + " | ".join(kept_headers) + " |", "|" + "|".join("---" for _ in kept_headers) + "|"]
+        lines.extend("| " + " | ".join(row) + " |" for row in rows)
+        lines.append("")
+        path.write_text("\n".join(lines), encoding="utf-8")
+        written.append(path)
+
+    return written
+
+
 def _html_table(headers: Iterable[str], rows: Iterable[Iterable[str]]) -> str:
     header_html = "".join(f"<th>{escape(str(h))}</th>" for h in headers)
     row_html = "".join(
@@ -250,6 +298,10 @@ th, td {{ border: 1px solid #ccc; padding: .45rem .6rem; text-align: left; }}
 th {{ background: #f3f3f3; }}
 pre {{ overflow-x: auto; background: #f6f6f6; padding: 1rem; }}
 </style>
+<script type=\"module\">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({{ startOnLoad: true }});
+</script>
 </head>
 <body>
 <h1>MBSE Lite Project Overview</h1>
@@ -257,11 +309,10 @@ pre {{ overflow-x: auto; background: #f6f6f6; padding: 1rem; }}
 {_html_table(["Object type", "Count"], count_rows)}
 <h2>Validation</h2>
 {_html_table(["Severity", "Finding"], validation_rows)}
+<h2>Traceability graph</h2>
+<pre class=\"mermaid\">{escape(mermaid_graph(model))}</pre>
 <h2>Relations</h2>
 {_html_table(["Source", "Relation", "Target"], relation_rows)}
-<h2>Mermaid source</h2>
-<p>Paste this block into a Mermaid-capable Markdown viewer to render the graph.</p>
-<pre>{escape(mermaid_graph(model))}</pre>
 </body>
 </html>
 """
