@@ -11,5 +11,9 @@
 | NEED-007 | Separate lawn-mower storage | The battery lawn mower shall have a separate enclosed storage compartment rather than sharing the open main storage volume. | Confirmed |
 | NEED-008 | Human-accessible interior | An adult user shall be able to enter the shed and stand upright inside while accessing stored items. | Confirmed |
 | NEED-009 | Compact elongated footprint | The preferred shed footprint is approximately 4.0 m by 1.2 m, subject to confirmation by site and layout checks. | Confirmed |
+| NEED-010 | Wide and bright main access | The main storage area should have a wide opening on the long side so both door leaves can be opened and daylight can enter the interior. | Confirmed |
+| NEED-011 | Independent mower access | The mower compartment shall be accessible directly from outside without requiring access through the main storage area. | Confirmed |
+| NEED-012 | Roll mower without lifting | The battery mower should be rolled between ground level and its raised storage compartment without manual lifting. | Confirmed |
+| NEED-013 | Simple roof form | The shed shall use a mono-pitch roof. | Confirmed |
 
 The remaining needs shall be refined from site conditions, exact item dimensions, construction preferences and legal constraints before detailed design.
