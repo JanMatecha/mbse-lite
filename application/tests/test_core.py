@@ -10,7 +10,7 @@ from mbse_lite.core import (
 
 
 def demo_project() -> Path:
-    return Path(__file__).parents[1] / "projects" / "demo_project"
+    return Path(__file__).resolve().parents[2] / "projects" / "demo_project"
 
 
 def test_demo_project_loads_and_validates():

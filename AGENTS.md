@@ -1,52 +1,38 @@
-# Codex Instructions
+# Codex Instructions — Repository Root
 
-## Repository purpose
+## Repository zones
 
-This repository contains both:
+This repository has two intentionally separated scopes:
 
-1. the development of the `mbse-lite` Python toolkit,
-2. example/private technical projects that use the MBSE-lite method.
+- `application/` — software development of MBSE Lite.
+- `projects/` — engineering/project data using MBSE Lite.
 
-## Core architecture
+Always determine which scope the requested change belongs to before editing files.
 
-- Markdown project files are the source of truth.
-- Python reads and validates Markdown tables.
-- Relations between model objects are explicit.
-- Mermaid, HTML and XLSX are generated views/exchange formats.
-- Keep the implementation intentionally small and transparent.
+## Scope rules
 
-## Model vocabulary
+1. Changes under `application/` must follow `application/AGENTS.md`.
+2. Changes under `projects/<name>/` must follow that project's `AGENTS.md`.
+3. Project-specific instructions override general repository instructions inside that project.
+4. Do not modify project engineering data merely to make an application feature look successful. Use tests or `projects/demo_project` as the regression fixture.
+5. Do not modify application behavior merely to encode a one-off project fact. Generalize only when a real reusable need exists.
+6. Never copy facts, requirements, decisions, risks, names, files or assumptions from one project into another unless explicitly instructed.
+7. Generated outputs are not authoritative project data unless a project explicitly states otherwise.
 
-Use these stable ID prefixes:
+## Separation of concerns
 
-- `NEED-` stakeholder/user need
-- `REQ-` requirement
-- `FUN-` function/action
-- `PART-` logical/physical part
-- `CON-` candidate concept
-- `VER-` verification/test
-- `DEC-` decision
-- `RISK-` risk
-- `ISSUE-` open issue/question
-- `TASK-` project task
-- `MS-` milestone
+When working on a technical project and a missing capability is discovered:
 
-Typical engineering traceability:
+- record the engineering need in the project,
+- treat the application enhancement as a separate software change,
+- add or update application tests,
+- then use the new capability on the project.
 
-```text
-NEED -> REQ -> FUN -> CON/PART -> VER
-```
+Do not mix unrelated application refactoring and engineering-model changes in one conceptual task unless necessary.
 
-## Development rules
+## General safety
 
-- Do not silently invent project requirements or technical facts.
-- Preserve existing IDs once assigned.
-- Prefer explicit simple data structures over complex abstractions.
-- Generated files must never become the authoritative project model.
-- Add automated tests for parser or validation behavior changes.
-- Do not add databases, web frameworks, or heavy dependencies unless a real use case requires them.
-- Keep future SysML v2 mapping in mind, but do not implement a full SysML parser in the POC.
-
-## Private project rule
-
-Do not introduce references to unrelated customer projects, prior commercial use cases, or confidential examples into this repository unless explicitly requested for that repository.
+- Preserve stable model IDs once assigned.
+- Do not invent technical facts or requirements silently.
+- Keep private-project content isolated.
+- Prefer small, reviewable changes.
