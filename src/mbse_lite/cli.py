@@ -3,7 +3,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .core import export_html, export_mermaid, export_xlsx, load_model, validate_model
+from .core import (
+    export_html,
+    export_mermaid,
+    export_xlsx,
+    import_xlsx_to_markdown,
+    load_model,
+    validate_model,
+)
 
 
 def _add_project_argument(parser: argparse.ArgumentParser) -> None:
@@ -29,11 +36,26 @@ def build_parser() -> argparse.ArgumentParser:
     _add_project_argument(xlsx)
     xlsx.add_argument("output", type=Path)
 
+    xlsx_import = sub.add_parser(
+        "import-xlsx",
+        help="Convert an edited MBSE-lite XLSX workbook to normalized Markdown for review",
+    )
+    xlsx_import.add_argument("input", type=Path)
+    xlsx_import.add_argument("output_dir", type=Path)
+
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
+
+    if args.command == "import-xlsx":
+        written = import_xlsx_to_markdown(args.input, args.output_dir)
+        for path in written:
+            print(f"Written: {path}")
+        print("Review the imported Markdown before replacing source-of-truth project files.")
+        return 0
+
     model = load_model(args.project)
 
     if args.command == "validate":
