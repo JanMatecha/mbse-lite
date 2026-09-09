@@ -18,5 +18,6 @@
 | REQ-014 | Mono-pitch roof | The shed shall use a mono-pitch roof. Roof slope direction, pitch and drainage details are TBD. | Confirmed |
 | REQ-015 | External mower-compartment access | The mower compartment shall have its own external access so the mower can be stored or removed without entering the main storage area. Exact side/location is TBD. | Confirmed |
 | REQ-016 | Mower access ramp | A ramp shall bridge the level difference between the surrounding ground and the mower-compartment floor so the battery mower can be rolled in and out without lifting. Ramp gradient, width, surface and storage/fixation concept are TBD. | Confirmed |
+| REQ-017 | Right-end shelving and door clearance | A shelving unit shall be provided on the right short end wall. The main double-leaf door opening on the long side shall begin far enough toward the centre to avoid conflict with the shelving depth and its usable access zone. Exact shelf depth and door offset are TBD. | Confirmed |
 
-Exact item dimensions, quantities, footprint tolerance, standing-clearance value, door dimensions and ramp geometry remain `TBD` until the first layout and site measurements are available.
+Exact item dimensions, quantities, footprint tolerance, standing-clearance value, door dimensions, shelving depth and ramp geometry remain `TBD` until the first layout and site measurements are available.
