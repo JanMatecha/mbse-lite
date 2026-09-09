@@ -18,6 +18,7 @@
 | NEED-011 | derives | REQ-015 |
 | NEED-012 | derives | REQ-016 |
 | NEED-013 | derives | REQ-014 |
+| NEED-014 | derives | REQ-017 |
 | REQ-001 | satisfied_by | FUN-001 |
 | REQ-002 | satisfied_by | FUN-002 |
 | REQ-003 | satisfied_by | FUN-003 |
@@ -34,6 +35,7 @@
 | REQ-014 | satisfied_by | FUN-011 |
 | REQ-015 | satisfied_by | FUN-009 |
 | REQ-016 | satisfied_by | FUN-010 |
+| REQ-017 | satisfied_by | FUN-005 |
 | REQ-001 | verified_by | VER-001 |
 | REQ-002 | verified_by | VER-002 |
 | REQ-003 | verified_by | VER-003 |
@@ -50,12 +52,14 @@
 | REQ-014 | verified_by | VER-014 |
 | REQ-015 | verified_by | VER-015 |
 | REQ-016 | verified_by | VER-016 |
+| REQ-017 | verified_by | VER-017 |
 | FUN-001 | realized_by | PART-001 |
 | FUN-002 | realized_by | PART-001 |
 | FUN-003 | realized_by | PART-002 |
 | FUN-004 | realized_by | PART-003 |
 | FUN-005 | realized_by | PART-006 |
 | FUN-005 | realized_by | PART-007 |
+| FUN-005 | realized_by | PART-012 |
 | FUN-006 | realized_by | PART-005 |
 | FUN-007 | realized_by | PART-007 |
 | FUN-008 | realized_by | PART-008 |
@@ -67,6 +71,7 @@
 | DEC-003 | selects | CON-004 |
 | DEC-004 | selects | CON-005 |
 | DEC-005 | selects | CON-006 |
+| DEC-006 | selects | PART-012 |
 | CON-001 | realizes | PART-003 |
 | CON-003 | realizes | PART-004 |
 | CON-003 | realizes | PART-005 |
@@ -74,9 +79,12 @@
 | CON-005 | realizes | PART-009 |
 | CON-006 | realizes | PART-010 |
 | CON-006 | realizes | PART-011 |
+| CON-009 | realizes | PART-008 |
+| CON-010 | realizes | PART-008 |
 | TASK-001 | resolves | ISSUE-001 |
 | TASK-002 | resolves | ISSUE-002 |
 | TASK-003 | resolves | ISSUE-003 |
 | TASK-004 | resolves | ISSUE-005 |
 | TASK-005 | resolves | ISSUE-006 |
 | TASK-006 | resolves | ISSUE-007 |
+| TASK-007 | resolves | ISSUE-008 |
