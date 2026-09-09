@@ -2,6 +2,12 @@
 
 Each subdirectory under `projects/` is an independent technical project using MBSE Lite.
 
+## Projects
+
+- `demo_project/` — stable regression/demo model for application testing.
+- `garden_tool_shed/` — first real private engineering project.
+- `_template/` — starting template for new projects.
+
 ## Isolation rule
 
 A project's engineering facts, assumptions, requirements, decisions, risks and tasks belong only to that project. Do not reuse content from another project unless explicitly instructed.
