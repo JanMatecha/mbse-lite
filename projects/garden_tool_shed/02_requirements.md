@@ -13,5 +13,10 @@
 | REQ-009 | Standing clearance | The interior clear height and access geometry shall allow an adult user to enter and stand upright inside. Exact minimum clear height is TBD. | Draft |
 | REQ-010 | Separate mower compartment | The battery lawn mower shall be stored in a dedicated enclosed compartment physically separated from the main storage volume. | Confirmed |
 | REQ-011 | Practical organization | The internal arrangement shall provide practical storage appropriate to both long tools and small loose items without preventing normal user access. | Draft |
+| REQ-012 | Double-leaf main door | The main storage area shall use a two-leaf external door located on a long side of the shed. Both leaves shall be independently openable to provide a wide opening. | Confirmed |
+| REQ-013 | Main-door daylight | With both main door leaves open, the opening shall provide useful natural daylight into the main storage area during daytime use. Detailed daylight acceptance criteria are TBD. | Draft |
+| REQ-014 | Mono-pitch roof | The shed shall use a mono-pitch roof. Roof slope direction, pitch and drainage details are TBD. | Confirmed |
+| REQ-015 | External mower-compartment access | The mower compartment shall have its own external access so the mower can be stored or removed without entering the main storage area. Exact side/location is TBD. | Confirmed |
+| REQ-016 | Mower access ramp | A ramp shall bridge the level difference between the surrounding ground and the mower-compartment floor so the battery mower can be rolled in and out without lifting. Ramp gradient, width, surface and storage/fixation concept are TBD. | Confirmed |
 
-Exact item dimensions, quantities, footprint tolerance and standing-clearance value remain `TBD` until the first layout and site measurements are available.
+Exact item dimensions, quantities, footprint tolerance, standing-clearance value, door dimensions and ramp geometry remain `TBD` until the first layout and site measurements are available.
