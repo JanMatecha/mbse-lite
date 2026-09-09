@@ -18,3 +18,4 @@
 | VER-014 | Verify mono-pitch roof | Drawing / design review | The final roof geometry is single-slope and has a defined drainage direction. | Planned |
 | VER-015 | Verify external mower access | Demonstration / layout review | The mower can be moved into and out of its compartment directly from outside without entering the main storage zone. | Planned |
 | VER-016 | Verify mower ramp usability | Demonstration / mock-up | The representative mower can be rolled between ground level and compartment floor without lifting, with acceptable slope, width and surface; detailed limits TBD. | Planned |
+| VER-017 | Verify right-end shelving and door clearance | Layout/drawing review and physical clearance check | The right short end wall contains the intended shelving and the adjacent edge of the main door opening does not conflict with shelf depth, stored items or practical shelf access. | Planned |
