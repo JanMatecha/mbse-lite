@@ -52,6 +52,32 @@ def test_xlsx_round_trip_to_normalized_markdown(tmp_path):
     }
 
 
+def test_load_model_reads_nested_project_areas(tmp_path):
+    mbse = tmp_path / "mbse"
+    project_management = tmp_path / "project_management"
+    mbse.mkdir()
+    project_management.mkdir()
+
+    (mbse / "01_needs.md").write_text(
+        "# Needs\n\n| ID | Name | Description | Status |\n|---|---|---|---|\n| NEED-001 | Example | Example need | Draft |\n",
+        encoding="utf-8",
+    )
+    (project_management / "01_tasks.md").write_text(
+        "# Tasks\n\n| ID | Name | Owner | Status |\n|---|---|---|---|\n| TASK-001 | Review need | TBD | Planned |\n",
+        encoding="utf-8",
+    )
+    (project_management / "03_relations.md").write_text(
+        "# Project-management relations\n\n| Source | Relation | Target |\n|---|---|---|\n| TASK-001 | evaluates | NEED-001 |\n",
+        encoding="utf-8",
+    )
+
+    model = load_model(tmp_path)
+
+    assert model.objects["NEED-001"].source_file == "mbse/01_needs.md"
+    assert model.objects["TASK-001"].source_file == "project_management/01_tasks.md"
+    assert model.relations[0].source_file == "project_management/03_relations.md"
+
+
 def test_web_viewer_contains_model_and_interactive_controls(tmp_path):
     model = load_model(demo_project())
     output = tmp_path / "viewer.html"

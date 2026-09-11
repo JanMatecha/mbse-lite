@@ -15,6 +15,7 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-009 | The application shall remain usable without a database or continuously running server in the POC phase. | Implemented |
 | APP-REQ-010 | The application model shall remain reasonably mappable to SysML v2 concepts in future versions. | Guiding |
 | APP-REQ-011 | The application shall provide a local read-only interactive web viewer that can be generated from a project and opened directly in a browser without a continuously running application server. | Implemented |
+| APP-REQ-012 | The application shall support physically separated MBSE and project-management Markdown areas within one project while preserving explicit relations across those areas. | Implemented |
 
 ## Rule for adding requirements
 
