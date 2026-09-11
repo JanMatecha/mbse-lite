@@ -7,6 +7,7 @@ from mbse_lite.core import (
     mermaid_graph,
     validate_model,
 )
+from mbse_lite.viewer import export_viewer
 
 
 def demo_project() -> Path:
@@ -49,3 +50,18 @@ def test_xlsx_round_trip_to_normalized_markdown(tmp_path):
     assert {(r.source, r.relation, r.target) for r in original.relations} == {
         (r.source, r.relation, r.target) for r in imported.relations
     }
+
+
+def test_web_viewer_contains_model_and_interactive_controls(tmp_path):
+    model = load_model(demo_project())
+    output = tmp_path / "viewer.html"
+
+    export_viewer(model, output, project_name="Demo Project")
+    html = output.read_text(encoding="utf-8")
+
+    assert "Demo Project" in html
+    assert "MBSE Lite · local read-only viewer" in html
+    assert "objectSearch" in html
+    assert "typeFilter" in html
+    assert "NEED-001" in html
+    assert "flowchart LR" in html
