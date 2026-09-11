@@ -2,46 +2,44 @@ from __future__ import annotations
 
 import json
 from html import escape
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import Mapping, Sequence
 
-from .core import Model, Relation, validate_model
-
-
-MBSE_AREA = "MBSE"
-PROJECT_MANAGEMENT_AREA = "Project Management"
-PM_RELATION_AREA = "Project Management / Cross-area"
+from .core import Model
+from .view_architecture import (
+    ViewDefinition,
+    build_default_view_assets,
+    build_viewer_manifest,
+    build_viewer_model,
+)
 
 
 def _json_for_html(value: object) -> str:
-    """Serialize data for embedding in an HTML script without closing the script tag."""
-    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+    """Serialize data for a script block without allowing an early script close."""
+
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("</", "<\\/")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
 
 
-def _area_for_source(source_file: str, object_type: str = "") -> str:
-    normalized = source_file.replace("\\", "/")
-    file_name = Path(normalized).name.lower()
-    if normalized.startswith("project_management/") or "project_management" in file_name:
-        return PROJECT_MANAGEMENT_AREA
-    if object_type in {"Task", "Milestone"}:
-        return PROJECT_MANAGEMENT_AREA
-    return MBSE_AREA
+def _asset_output_path(output_dir: Path, source: str) -> Path:
+    normalized = source.replace("\\", "/")
+    relative = PurePosixPath(normalized)
+    if (
+        not normalized
+        or relative.is_absolute()
+        or any(part in {"", ".", ".."} for part in relative.parts)
+        or ":" in relative.parts[0]
+    ):
+        raise ValueError(f"View asset path must be a safe relative path: {source!r}")
+    return output_dir.joinpath(*relative.parts)
 
 
-def _mermaid_subset(model: Model, object_ids: set[str], relations: list[Relation]) -> str:
-    lines = ["flowchart LR"]
-    for object_id in sorted(object_ids):
-        obj = model.objects.get(object_id)
-        if obj is None:
-            continue
-        label = obj.attributes.get("Name") or obj.attributes.get("Title") or obj.id
-        safe_label = label.replace('"', "'")
-        lines.append(f'    {obj.id.replace("-", "_")}["{obj.id}<br/>{safe_label}"]')
-    for rel in relations:
-        if rel.source in object_ids and rel.target in object_ids:
-            lines.append(
-                f'    {rel.source.replace("-", "_")} -->|{rel.relation}| {rel.target.replace("-", "_")}'
-            )
-    return "\n".join(lines)
+def _write_json(path: Path, value: object) -> None:
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def export_viewer(
@@ -49,86 +47,42 @@ def export_viewer(
     output: str | Path,
     *,
     project_name: str = "MBSE Lite Project",
+    views: Sequence[ViewDefinition] | None = None,
+    view_assets: Mapping[str, str | bytes] | None = None,
 ) -> None:
-    """Generate a single-file, read-only interactive web viewer for an MBSE Lite model."""
+    """Generate a read-only, manifest-driven web viewer bundle.
+
+    ``output`` remains the HTML path for backwards compatibility. The bundle
+    also contains sibling ``model.json``, ``viewer.json`` and referenced view
+    assets. Text assets are embedded in the HTML so the viewer still works when
+    opened directly through ``file://``.
+    """
+
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    object_areas: dict[str, str] = {}
-    objects = []
-    for obj in sorted(model.objects.values(), key=lambda item: item.id):
-        area = _area_for_source(obj.source_file, obj.type)
-        object_areas[obj.id] = area
-        objects.append(
-            {
-                "id": obj.id,
-                "type": obj.type,
-                "area": area,
-                "name": obj.attributes.get("Name") or obj.attributes.get("Title") or obj.id,
-                "status": obj.attributes.get("Status", ""),
-                "source_file": obj.source_file,
-                "attributes": obj.attributes,
-            }
-        )
+    viewer_model = build_viewer_model(model)
+    manifest = build_viewer_manifest(project_name, views)
+    assets: dict[str, str | bytes] = {}
+    if views is None:
+        assets.update(build_default_view_assets(model))
+    if view_assets:
+        assets.update(view_assets)
 
-    relations = []
-    for rel in model.relations:
-        source_area = object_areas.get(rel.source, _area_for_source(rel.source_file))
-        target_area = object_areas.get(rel.target, source_area)
-        area = (
-            PM_RELATION_AREA
-            if PROJECT_MANAGEMENT_AREA in {source_area, target_area}
-            else MBSE_AREA
-        )
-        relations.append(
-            {
-                "source": rel.source,
-                "relation": rel.relation,
-                "target": rel.target,
-                "source_file": rel.source_file,
-                "area": area,
-            }
-        )
+    _write_json(output_path.parent / "model.json", viewer_model)
+    _write_json(output_path.parent / "viewer.json", manifest)
 
-    findings = [
-        {"severity": severity, "message": message}
-        for severity, message in validate_model(model)
-    ]
+    for source, content in assets.items():
+        asset_path = _asset_output_path(output_path.parent, source)
+        asset_path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            asset_path.write_bytes(content)
+        else:
+            asset_path.write_text(content, encoding="utf-8")
 
-    supporting_tables = []
-    for key, rows in sorted(model.tables.items()):
-        if not rows:
-            continue
-        headers = list(rows[0])
-        header_set = set(headers)
-        if "ID" in header_set or {"Source", "Relation", "Target"}.issubset(header_set):
-            continue
-        source_file = key.rsplit(":", 1)[0]
-        supporting_tables.append(
-            {
-                "source_file": source_file,
-                "area": _area_for_source(source_file),
-                "headers": headers,
-                "rows": [[row.get(header, "") for header in headers] for row in rows],
-            }
-        )
-
-    mbse_ids = {object_id for object_id, area in object_areas.items() if area == MBSE_AREA}
-    pm_ids = {object_id for object_id, area in object_areas.items() if area == PROJECT_MANAGEMENT_AREA}
-
-    mbse_relations = [
-        rel for rel in model.relations if rel.source in mbse_ids and rel.target in mbse_ids
-    ]
-    delivery_relations = [
-        rel for rel in model.relations if rel.source in pm_ids or rel.target in pm_ids
-    ]
-    delivery_ids = set(pm_ids)
-    for rel in delivery_relations:
-        delivery_ids.add(rel.source)
-        delivery_ids.add(rel.target)
-
-    mbse_graph = escape(_mermaid_subset(model, mbse_ids, mbse_relations))
-    delivery_graph = escape(_mermaid_subset(model, delivery_ids, delivery_relations))
+    embedded_assets = {
+        source: content for source, content in assets.items() if isinstance(content, str)
+    }
     title = escape(project_name)
 
     html = """<!doctype html>
@@ -170,13 +124,15 @@ body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, B
 header { position: sticky; top: 0; z-index: 10; display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.4rem; background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand h1 { margin: 0; font-size: 1.15rem; }
 .brand p { margin: .2rem 0 0; color: var(--muted); font-size: .85rem; }
-.layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: calc(100vh - 74px); }
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr) 330px; min-height: calc(100vh - 74px); }
 nav { padding: 1rem; border-right: 1px solid var(--line); background: var(--panel); }
-nav button { width: 100%; border: 0; background: transparent; color: var(--text); text-align: left; padding: .7rem .8rem; margin-bottom: .2rem; border-radius: .5rem; cursor: pointer; font: inherit; }
+.nav-group { margin: 0 0 1rem; }
+.nav-group h2 { margin: 0 0 .35rem; padding: 0 .8rem; color: var(--muted); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+nav button { width: 100%; border: 0; background: transparent; color: var(--text); text-align: left; padding: .62rem .8rem; margin-bottom: .12rem; border-radius: .5rem; cursor: pointer; font: inherit; }
 nav button:hover, nav button.active { background: var(--accent-soft); color: var(--accent); }
 main { padding: 1.4rem; min-width: 0; }
-section { display: none; }
-section.active { display: block; }
+aside { padding: 1.2rem; min-width: 0; background: var(--panel); border-left: 1px solid var(--line); }
+aside h2 { font-size: 1rem; margin: 0 0 1rem; }
 h2 { margin-top: 0; }
 h3 { margin-top: 1.4rem; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8rem; margin: 1rem 0 1.5rem; }
@@ -190,35 +146,50 @@ input[type="search"] { min-width: min(420px, 100%); flex: 1; }
 table { border-collapse: collapse; width: 100%; font-size: .92rem; }
 th, td { padding: .6rem .75rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; }
-tbody tr:hover { background: var(--accent-soft); }
+tbody tr:hover, tbody tr.selected { background: var(--accent-soft); }
 tbody tr.object-row { cursor: pointer; }
 .badge { display: inline-block; border: 1px solid var(--line); border-radius: 99px; padding: .12rem .5rem; font-size: .78rem; white-space: nowrap; }
 .severity-ERROR { color: var(--error); font-weight: 700; }
 .severity-WARNING { color: var(--warn); font-weight: 700; }
 .severity-OK { color: var(--ok); font-weight: 700; }
-.detail { margin-top: 1rem; background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; padding: 1rem; }
-.detail dl { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: .45rem .8rem; }
+.detail dl { display: grid; grid-template-columns: minmax(90px, 120px) 1fr; gap: .45rem .7rem; font-size: .9rem; }
 .detail dt { color: var(--muted); }
 .detail dd { margin: 0; overflow-wrap: anywhere; }
+.detail ul { padding-left: 1.2rem; }
+.detail li { margin: .5rem 0; overflow-wrap: anywhere; }
 .graph { background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; padding: 1rem; overflow: auto; margin-bottom: 1rem; }
 .data-block { margin: 1rem 0 1.4rem; }
 .data-block h3 { margin-bottom: .35rem; }
+.scaffold { border: 1px dashed var(--line); border-radius: .7rem; padding: 1.2rem; background: var(--panel); }
+.engineering-asset { display: block; width: 100%; max-height: 70vh; object-fit: contain; border: 1px solid var(--line); background: white; }
+.link-button { border: 0; padding: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; font-weight: 600; }
 details { margin-top: 1rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 760px) {
+@media (max-width: 1050px) {
+  .layout { grid-template-columns: 210px minmax(0, 1fr); }
+  aside { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 700px) {
   .layout { grid-template-columns: 1fr; }
-  nav { display: flex; gap: .3rem; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  nav { display: flex; gap: .6rem; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .nav-group { display: flex; gap: .2rem; margin: 0; }
+  .nav-group h2 { align-self: center; white-space: nowrap; }
   nav button { width: auto; white-space: nowrap; }
+  aside { grid-column: auto; }
   .detail dl { grid-template-columns: 1fr; }
 }
 </style>
 <script type="module">
-try {
-  const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
-  mermaid.initialize({ startOnLoad: true, securityLevel: 'strict' });
-} catch (error) {
-  console.info('Mermaid could not be loaded. The viewer remains usable without graph rendering.', error);
-}
+window.mbseMermaidReady = (async () => {
+  try {
+    const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+    return mermaid;
+  } catch (error) {
+    console.info('Mermaid could not be loaded. Source remains available.', error);
+    return null;
+  }
+})();
 </script>
 </head>
 <body>
@@ -227,184 +198,396 @@ try {
     <h1>__TITLE__</h1>
     <p>MBSE Lite · local read-only viewer</p>
   </div>
-  <div class="muted">__OBJECT_COUNT__ objects · __RELATION_COUNT__ relations</div>
+  <div id="modelCounts" class="muted"></div>
 </header>
 <div class="layout">
-<nav aria-label="Viewer sections">
-  <button class="active" data-section="overview">Overview</button>
-  <button data-section="mbse">MBSE</button>
-  <button data-section="projectManagement">Project Management</button>
-  <button data-section="projectData">Project Data</button>
-  <button data-section="relations">Relations</button>
-  <button data-section="validation">Validation</button>
-  <button data-section="traceability">Traceability</button>
-</nav>
-<main>
-<section id="overview" class="active">
-  <h2>Overview</h2>
-  <p class="muted">Engineering definition and project execution are intentionally presented as separate areas of one traceable project.</p>
-  <div class="cards">
-    <div class="card"><span class="muted">MBSE objects</span><strong>__MBSE_COUNT__</strong></div>
-    <div class="card"><span class="muted">Project-management objects</span><strong>__PM_COUNT__</strong></div>
-    <div class="card"><span class="muted">Relations</span><strong>__RELATION_COUNT__</strong></div>
-    <div class="card"><span class="muted">Supporting data tables</span><strong>__DATA_TABLE_COUNT__</strong></div>
-    <div class="card"><span class="muted">Validation findings</span><strong>__FINDING_COUNT__</strong></div>
-  </div>
-</section>
-<section id="mbse">
-  <h2>MBSE</h2>
-  <p class="muted">Needs, requirements, functions, architecture, concepts, technical decisions, verification and engineering issues/risks.</p>
-  <div class="toolbar">
-    <input id="mbseSearch" type="search" placeholder="Search engineering objects…">
-    <select id="mbseTypeFilter"><option value="">All MBSE object types</option></select>
-  </div>
-  <div class="table-wrap"><table><thead><tr><th>ID</th><th>Type</th><th>Name</th><th>Status</th><th>Source</th></tr></thead><tbody id="mbseRows"></tbody></table></div>
-  <div id="mbseDetail" class="detail muted">Select an engineering object to inspect attributes and direct relations.</div>
-</section>
-<section id="projectManagement">
-  <h2>Project Management</h2>
-  <p class="muted">Tasks, milestones and execution-oriented objects. Engineering facts remain in the MBSE area.</p>
-  <div class="toolbar">
-    <input id="pmSearch" type="search" placeholder="Search project-management objects…">
-    <select id="pmTypeFilter"><option value="">All project-management object types</option></select>
-  </div>
-  <div class="table-wrap"><table><thead><tr><th>ID</th><th>Type</th><th>Name</th><th>Status</th><th>Source</th></tr></thead><tbody id="pmRows"></tbody></table></div>
-  <div id="pmDetail" class="detail muted">Select a project-management object to inspect attributes and direct relations.</div>
-</section>
-<section id="projectData">
-  <h2>Project Data</h2>
-  <p class="muted">Supporting Markdown tables that are not MBSE objects or relation tables, for example inventory or site data.</p>
-  <div class="toolbar"><input id="dataSearch" type="search" placeholder="Search supporting project data…"></div>
-  <div id="dataContent"></div>
-</section>
-<section id="relations">
-  <h2>Relations</h2>
-  <div class="toolbar">
-    <input id="relationSearch" type="search" placeholder="Search source, relation or target…">
-    <select id="relationAreaFilter"><option value="">All relation areas</option><option value="MBSE">MBSE</option><option value="Project Management / Cross-area">Project Management / Cross-area</option></select>
-  </div>
-  <div class="table-wrap"><table><thead><tr><th>Area</th><th>Source</th><th>Relation</th><th>Target</th><th>Source file</th></tr></thead><tbody id="relationRows"></tbody></table></div>
-</section>
-<section id="validation">
-  <h2>Validation</h2>
-  <div id="validationContent"></div>
-</section>
-<section id="traceability">
-  <h2>Traceability</h2>
-  <p class="muted">Engineering traceability is separated from work-to-engineering delivery links.</p>
-  <h3>MBSE traceability</h3>
-  <div class="graph"><pre class="mermaid">__MBSE_GRAPH__</pre></div>
-  <details><summary>MBSE Mermaid source</summary><pre>__MBSE_GRAPH__</pre></details>
-  <h3>Project-management / cross-area traceability</h3>
-  <div class="graph"><pre class="mermaid">__DELIVERY_GRAPH__</pre></div>
-  <details><summary>Project-management Mermaid source</summary><pre>__DELIVERY_GRAPH__</pre></details>
-</section>
-</main>
+  <nav id="viewNavigation" aria-label="Project views"></nav>
+  <main><div id="viewContent"></div></main>
+  <aside>
+    <h2>Selected object</h2>
+    <div id="objectDetail" class="detail muted">Select an object to inspect its attributes and direct relations.</div>
+  </aside>
 </div>
 <script>
-const objects = __OBJECTS_JSON__;
-const relations = __RELATIONS_JSON__;
-const findings = __FINDINGS_JSON__;
-const supportingTables = __TABLES_JSON__;
+const viewerManifest = __MANIFEST_JSON__;
+const viewerModel = __MODEL_JSON__;
+const embeddedViewAssets = __ASSETS_JSON__;
+
+const objects = viewerModel.objects;
+const relations = viewerModel.relations;
+const supportingTables = viewerModel.tables;
+const findings = viewerModel.validation;
 
 const escapeHtml = (value) => String(value ?? '')
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 
-function showSection(id) {
-  document.querySelectorAll('main section').forEach(section => section.classList.toggle('active', section.id === id));
-  document.querySelectorAll('nav button').forEach(button => button.classList.toggle('active', button.dataset.section === id));
-}
-document.querySelectorAll('nav button').forEach(button => button.addEventListener('click', () => showSection(button.dataset.section)));
+const viewHeader = (view) => `
+  <h2>${escapeHtml(view.title)}</h2>
+  ${view.description ? `<p class="muted">${escapeHtml(view.description)}</p>` : ''}`;
 
-function showObject(id, detailId) {
-  const object = objects.find(item => item.id === id);
-  if (!object) return;
-  const direct = relations.filter(rel => rel.source === id || rel.target === id);
-  const attributes = Object.entries(object.attributes).map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd>`).join('');
-  const relHtml = direct.length
-    ? `<ul>${direct.map(rel => `<li><span class="badge">${escapeHtml(rel.area)}</span> <strong>${escapeHtml(rel.source)}</strong> — ${escapeHtml(rel.relation)} → <strong>${escapeHtml(rel.target)}</strong></li>`).join('')}</ul>`
+let selectedObjectId = null;
+let activeViewId = null;
+let activeRenderer = null;
+
+function renderSelectedObject() {
+  const detail = document.getElementById('objectDetail');
+  if (!selectedObjectId) {
+    detail.classList.add('muted');
+    detail.innerHTML = 'Select an object to inspect its attributes and direct relations.';
+    return;
+  }
+  const object = objects.find(item => item.id === selectedObjectId);
+  if (!object) {
+    detail.classList.add('muted');
+    detail.textContent = `Unknown object: ${selectedObjectId}`;
+    return;
+  }
+  detail.classList.remove('muted');
+  const direct = relations.filter(rel => rel.source === object.id || rel.target === object.id);
+  const attributes = Object.entries(object.attributes)
+    .map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd>`).join('');
+  const relationHtml = direct.length
+    ? `<ul>${direct.map(rel => {
+        const otherId = rel.source === object.id ? rel.target : rel.source;
+        return `<li><span class="badge">${escapeHtml(rel.area)}</span> ${escapeHtml(rel.source)} — ${escapeHtml(rel.relation)} → ${escapeHtml(rel.target)} <button class="link-button" data-object-id="${escapeHtml(otherId)}">select</button></li>`;
+      }).join('')}</ul>`
     : '<p class="muted">No direct relations.</p>';
-  document.getElementById(detailId).innerHTML = `
+  detail.innerHTML = `
     <h3>${escapeHtml(object.id)} · ${escapeHtml(object.name)}</h3>
     <dl><dt>Area</dt><dd>${escapeHtml(object.area)}</dd><dt>Type</dt><dd>${escapeHtml(object.type)}</dd><dt>Source</dt><dd>${escapeHtml(object.source_file)}</dd>${attributes}</dl>
-    <h4>Direct relations</h4>${relHtml}`;
+    <h4>Direct relations</h4>${relationHtml}`;
+  detail.querySelectorAll('[data-object-id]').forEach(button =>
+    button.addEventListener('click', () => setSelectedObject(button.dataset.objectId)));
 }
 
-function setupObjectArea(area, prefix) {
-  const search = document.getElementById(`${prefix}Search`);
-  const typeFilter = document.getElementById(`${prefix}TypeFilter`);
-  const rowsElement = document.getElementById(`${prefix}Rows`);
-  const detailId = `${prefix}Detail`;
-  const areaObjects = objects.filter(object => object.area === area);
+function setSelectedObject(id) {
+  const nextId = id && objects.some(object => object.id === id) ? id : null;
+  if (nextId === selectedObjectId) return;
+  selectedObjectId = nextId;
+  renderSelectedObject();
+  activeRenderer?.onSelectionChanged?.(selectedObjectId);
+  window.dispatchEvent(new CustomEvent('mbse-selection-change', {
+    detail: { selectedObjectId }
+  }));
+}
 
-  [...new Set(areaObjects.map(object => object.type))].sort().forEach(type => {
-    const option = document.createElement('option');
-    option.value = type;
-    option.textContent = type;
-    typeFilter.appendChild(option);
-  });
+function overviewRenderer(view, context) {
+  return {
+    mount(container) {
+      const summary = context.model.summary;
+      container.innerHTML = `${viewHeader(view)}
+        <p class="muted">Engineering definition and project execution remain separate areas of one traceable project. Generated views are derived from the Markdown source model.</p>
+        <div class="cards">
+          <div class="card"><span class="muted">MBSE objects</span><strong>${summary.mbse_objects}</strong></div>
+          <div class="card"><span class="muted">Project-management objects</span><strong>${summary.project_management_objects}</strong></div>
+          <div class="card"><span class="muted">Relations</span><strong>${summary.relations}</strong></div>
+          <div class="card"><span class="muted">Supporting data tables</span><strong>${summary.tables}</strong></div>
+          <div class="card"><span class="muted">Validation findings</span><strong>${summary.validation_findings}</strong></div>
+        </div>`;
+    }
+  };
+}
 
-  function render() {
+function objectsRenderer(view, context) {
+  let rowsElement;
+  let search;
+  let typeFilter;
+  const configuredArea = view.config?.area || '';
+  const configuredTypes = Array.isArray(view.config?.types) ? view.config.types : [];
+  const searchId = view.config?.search_id || `${view.id}Search`;
+  const viewObjects = context.model.objects.filter(object =>
+    (!configuredArea || object.area === configuredArea) &&
+    (!configuredTypes.length || configuredTypes.includes(object.type)));
+
+  function renderRows() {
     const query = search.value.trim().toLowerCase();
     const type = typeFilter.value;
-    const rows = areaObjects.filter(object => {
+    const rows = viewObjects.filter(object => {
       const searchable = JSON.stringify(object).toLowerCase();
       return (!type || object.type === type) && (!query || searchable.includes(query));
     });
     rowsElement.innerHTML = rows.map(object => `
-      <tr class="object-row" data-id="${escapeHtml(object.id)}">
+      <tr class="object-row${object.id === selectedObjectId ? ' selected' : ''}" data-id="${escapeHtml(object.id)}">
         <td><strong>${escapeHtml(object.id)}</strong></td>
         <td><span class="badge">${escapeHtml(object.type)}</span></td>
         <td>${escapeHtml(object.name)}</td>
         <td>${escapeHtml(object.status)}</td>
         <td>${escapeHtml(object.source_file)}</td>
       </tr>`).join('');
-    rowsElement.querySelectorAll('.object-row').forEach(row => row.addEventListener('click', () => showObject(row.dataset.id, detailId)));
+    rowsElement.querySelectorAll('.object-row').forEach(row =>
+      row.addEventListener('click', () => context.setSelectedObject(row.dataset.id)));
   }
 
-  search.addEventListener('input', render);
-  typeFilter.addEventListener('change', render);
-  render();
+  return {
+    mount(container) {
+      container.innerHTML = `${viewHeader(view)}
+        <div class="toolbar">
+          <input id="${escapeHtml(searchId)}" type="search" placeholder="Search objects…">
+          <select><option value="">All object types</option></select>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>ID</th><th>Type</th><th>Name</th><th>Status</th><th>Source</th></tr></thead><tbody></tbody></table></div>`;
+      search = container.querySelector('input[type="search"]');
+      typeFilter = container.querySelector('select');
+      rowsElement = container.querySelector('tbody');
+      [...new Set(viewObjects.map(object => object.type))].sort().forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        typeFilter.appendChild(option);
+      });
+      search.addEventListener('input', renderRows);
+      typeFilter.addEventListener('change', renderRows);
+      renderRows();
+    },
+    onSelectionChanged() {
+      if (rowsElement) renderRows();
+    }
+  };
 }
 
-setupObjectArea('MBSE', 'mbse');
-setupObjectArea('Project Management', 'pm');
-
-function renderProjectData() {
-  const query = document.getElementById('dataSearch').value.trim().toLowerCase();
-  const tables = supportingTables.filter(table => !query || JSON.stringify(table).toLowerCase().includes(query));
-  const container = document.getElementById('dataContent');
-  if (!tables.length) {
-    container.innerHTML = '<div class="card muted">No supporting data tables match the current filter.</div>';
-    return;
+function tablesRenderer(view, context) {
+  let container;
+  let search;
+  function renderTables() {
+    const query = search.value.trim().toLowerCase();
+    const tables = context.model.tables.filter(table =>
+      !query || JSON.stringify(table).toLowerCase().includes(query));
+    const content = container.querySelector('[data-table-content]');
+    if (!tables.length) {
+      content.innerHTML = '<div class="card muted">No supporting data tables match the current filter.</div>';
+      return;
+    }
+    content.innerHTML = tables.map(table => {
+      const headers = table.headers.map(header => `<th>${escapeHtml(header)}</th>`).join('');
+      const rows = table.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
+      return `<div class="data-block"><h3>${escapeHtml(table.source_file)}</h3><span class="badge">${escapeHtml(table.area)}</span><div class="table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    }).join('');
   }
-  container.innerHTML = tables.map(table => {
-    const headers = table.headers.map(header => `<th>${escapeHtml(header)}</th>`).join('');
-    const rows = table.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
-    return `<div class="data-block"><h3>${escapeHtml(table.source_file)}</h3><span class="badge">${escapeHtml(table.area)}</span><div class="table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
-  }).join('');
+  return {
+    mount(target) {
+      container = target;
+      container.innerHTML = `${viewHeader(view)}<div class="toolbar"><input id="dataSearch" type="search" placeholder="Search supporting project data…"></div><div data-table-content></div>`;
+      search = container.querySelector('input');
+      search.addEventListener('input', renderTables);
+      renderTables();
+    }
+  };
 }
-document.getElementById('dataSearch').addEventListener('input', renderProjectData);
-renderProjectData();
 
-function renderRelations() {
-  const query = document.getElementById('relationSearch').value.trim().toLowerCase();
-  const area = document.getElementById('relationAreaFilter').value;
-  const rows = relations.filter(rel => (!area || rel.area === area) && (!query || JSON.stringify(rel).toLowerCase().includes(query)));
-  document.getElementById('relationRows').innerHTML = rows.map(rel => `
-    <tr><td><span class="badge">${escapeHtml(rel.area)}</span></td><td>${escapeHtml(rel.source)}</td><td>${escapeHtml(rel.relation)}</td><td>${escapeHtml(rel.target)}</td><td>${escapeHtml(rel.source_file)}</td></tr>`).join('');
+function relationsRenderer(view, context) {
+  let container;
+  let search;
+  let areaFilter;
+  function renderRelations() {
+    const query = search.value.trim().toLowerCase();
+    const area = areaFilter.value;
+    const rows = context.model.relations.filter(rel =>
+      (!area || rel.area === area) && (!query || JSON.stringify(rel).toLowerCase().includes(query)));
+    const tbody = container.querySelector('tbody');
+    tbody.innerHTML = rows.map(rel => `
+      <tr><td><span class="badge">${escapeHtml(rel.area)}</span></td><td><button class="link-button" data-object-id="${escapeHtml(rel.source)}">${escapeHtml(rel.source)}</button></td><td>${escapeHtml(rel.relation)}</td><td><button class="link-button" data-object-id="${escapeHtml(rel.target)}">${escapeHtml(rel.target)}</button></td><td>${escapeHtml(rel.source_file)}</td></tr>`).join('');
+    tbody.querySelectorAll('[data-object-id]').forEach(button =>
+      button.addEventListener('click', () => context.setSelectedObject(button.dataset.objectId)));
+  }
+  return {
+    mount(target) {
+      container = target;
+      const areas = [...new Set(context.model.relations.map(rel => rel.area))].sort();
+      container.innerHTML = `${viewHeader(view)}
+        <div class="toolbar"><input id="relationSearch" type="search" placeholder="Search source, relation or target…"><select id="relationAreaFilter"><option value="">All relation areas</option></select></div>
+        <div class="table-wrap"><table><thead><tr><th>Area</th><th>Source</th><th>Relation</th><th>Target</th><th>Source file</th></tr></thead><tbody></tbody></table></div>`;
+      search = container.querySelector('#relationSearch');
+      areaFilter = container.querySelector('#relationAreaFilter');
+      areas.forEach(area => {
+        const option = document.createElement('option');
+        option.value = area;
+        option.textContent = area;
+        areaFilter.appendChild(option);
+      });
+      search.addEventListener('input', renderRelations);
+      areaFilter.addEventListener('change', renderRelations);
+      renderRelations();
+    }
+  };
 }
-document.getElementById('relationSearch').addEventListener('input', renderRelations);
-document.getElementById('relationAreaFilter').addEventListener('change', renderRelations);
-renderRelations();
 
-const validationContent = document.getElementById('validationContent');
-if (!findings.length) {
-  validationContent.innerHTML = '<div class="card"><span class="severity-OK">OK</span> · No validation findings.</div>';
-} else {
-  validationContent.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Severity</th><th>Finding</th></tr></thead><tbody>${findings.map(item => `<tr><td class="severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</td><td>${escapeHtml(item.message)}</td></tr>`).join('')}</tbody></table></div>`;
+function validationRenderer(view, context) {
+  return {
+    mount(container) {
+      if (!context.model.validation.length) {
+        container.innerHTML = `${viewHeader(view)}<div class="card"><span class="severity-OK">OK</span> · No validation findings.</div>`;
+        return;
+      }
+      const rows = context.model.validation.map(item => {
+        const severity = ['ERROR', 'WARNING'].includes(item.severity) ? item.severity : 'OK';
+        return `<tr><td class="severity-${severity}">${escapeHtml(item.severity)}</td><td>${escapeHtml(item.message)}</td></tr>`;
+      }).join('');
+      container.innerHTML = `${viewHeader(view)}<div class="table-wrap"><table><thead><tr><th>Severity</th><th>Finding</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+  };
 }
+
+function mermaidRenderer(view, context) {
+  return {
+    mount(container) {
+      const source = context.assets[view.source];
+      if (typeof source !== 'string') {
+        container.innerHTML = `${viewHeader(view)}<div class="scaffold muted">Mermaid source is unavailable: ${escapeHtml(view.source || '(no source)')}</div>`;
+        return;
+      }
+      container.innerHTML = `${viewHeader(view)}<div class="graph"><pre class="mermaid">${escapeHtml(source)}</pre></div><details><summary>Mermaid source</summary><pre>${escapeHtml(source)}</pre></details>`;
+      const graph = container.querySelector('.mermaid');
+      window.mbseMermaidReady?.then(mermaid => mermaid?.run({ nodes: [graph] }));
+    },
+    onSelectionChanged(id) {
+      this.selectedObjectId = id;
+    }
+  };
+}
+
+function safeAssetSource(source) {
+  const normalized = String(source || '').replaceAll('\\\\', '/');
+  if (!normalized || normalized.startsWith('/') || normalized.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(normalized)) return null;
+  if (normalized.split('/').some(part => !part || part === '.' || part === '..')) return null;
+  return normalized;
+}
+
+function svgRenderer(view) {
+  let selectionNote;
+  return {
+    mount(container) {
+      const source = safeAssetSource(view.source);
+      container.innerHTML = `${viewHeader(view)}<div class="scaffold" data-svg-host></div>`;
+      const host = container.querySelector('[data-svg-host]');
+      if (!source) {
+        host.innerHTML = '<p class="muted">SVG source is missing or unsafe.</p>';
+        return;
+      }
+      const image = document.createElement('img');
+      image.className = 'engineering-asset';
+      image.src = source;
+      image.alt = view.title;
+      host.appendChild(image);
+      selectionNote = document.createElement('p');
+      selectionNote.className = 'muted';
+      selectionNote.textContent = 'SVG identity convention: data-mbse-id on source elements. Selection highlighting is reserved for a later renderer revision.';
+      host.appendChild(selectionNote);
+    },
+    onSelectionChanged(id) {
+      if (selectionNote) selectionNote.dataset.selectedObjectId = id || '';
+    }
+  };
+}
+
+function scaffoldRenderer(kind) {
+  let selectionValue;
+  return (view) => ({
+    mount(container) {
+      container.innerHTML = `${viewHeader(view)}<div class="scaffold"><p><strong>${escapeHtml(kind)} renderer contract is available; interactive rendering is not implemented in V0.1.</strong></p><p class="muted">Source: ${escapeHtml(view.source || '(not specified)')}</p><p class="muted" data-selection-value>No object selected.</p></div>`;
+      selectionValue = container.querySelector('[data-selection-value]');
+    },
+    onSelectionChanged(id) {
+      if (selectionValue) selectionValue.textContent = id ? `Selected object: ${id}` : 'No object selected.';
+    }
+  });
+}
+
+function unsupportedRenderer(view) {
+  return {
+    mount(container) {
+      container.innerHTML = `${viewHeader(view)}<div class="scaffold"><strong>Unsupported view type</strong><p class="muted">No renderer is registered for “${escapeHtml(view.type)}”. The rest of the viewer remains available.</p></div>`;
+    }
+  };
+}
+
+const rendererFactories = {
+  overview: overviewRenderer,
+  objects: objectsRenderer,
+  tables: tablesRenderer,
+  relations: relationsRenderer,
+  validation: validationRenderer,
+  mermaid: mermaidRenderer,
+  graph: scaffoldRenderer('Graph'),
+  svg: svgRenderer,
+  gltf: scaffoldRenderer('glTF')
+};
+
+const viewerContext = {
+  model: viewerModel,
+  manifest: viewerManifest,
+  assets: embeddedViewAssets,
+  setSelectedObject,
+  getSelectedObjectId: () => selectedObjectId
+};
+
+function activateView(viewId) {
+  const view = viewerManifest.views.find(item => item.id === viewId);
+  if (!view) return;
+  activeRenderer?.unmount?.();
+  activeViewId = view.id;
+  document.querySelectorAll('[data-view-id]').forEach(button =>
+    button.classList.toggle('active', button.dataset.viewId === activeViewId));
+  const container = document.getElementById('viewContent');
+  container.replaceChildren();
+  const factory = rendererFactories[view.type] || unsupportedRenderer;
+  try {
+    activeRenderer = factory(view, viewerContext) || {};
+    activeRenderer.mount?.(container);
+    activeRenderer.onSelectionChanged?.(selectedObjectId);
+  } catch (error) {
+    console.error(`Failed to render view ${view.id}`, error);
+    activeRenderer = unsupportedRenderer(view);
+    activeRenderer.mount(container);
+  }
+}
+
+function renderNavigation() {
+  const navigation = document.getElementById('viewNavigation');
+  const groups = new Map();
+  viewerManifest.views.forEach(view => {
+    if (!groups.has(view.group)) groups.set(view.group, []);
+    groups.get(view.group).push(view);
+  });
+  groups.forEach((views, group) => {
+    const section = document.createElement('section');
+    section.className = 'nav-group';
+    const heading = document.createElement('h2');
+    heading.textContent = group;
+    section.appendChild(heading);
+    views.forEach(view => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.viewId = view.id;
+      button.textContent = view.title;
+      button.addEventListener('click', () => activateView(view.id));
+      section.appendChild(button);
+    });
+    navigation.appendChild(section);
+  });
+}
+
+function registerRenderer(type, factory) {
+  if (!type || typeof factory !== 'function') throw new TypeError('A renderer type and factory function are required.');
+  rendererFactories[type] = factory;
+  const activeView = viewerManifest.views.find(view => view.id === activeViewId);
+  if (activeView?.type === type) activateView(activeViewId);
+}
+
+window.mbseViewer = {
+  getSelectedObjectId: () => selectedObjectId,
+  setSelectedObject,
+  registerRenderer,
+  activateView,
+  model: viewerModel,
+  manifest: viewerManifest
+};
+
+document.getElementById('modelCounts').textContent = `${viewerModel.summary.objects} objects · ${viewerModel.summary.relations} relations`;
+renderNavigation();
+renderSelectedObject();
+if (viewerManifest.default_view) activateView(viewerManifest.default_view);
+else document.getElementById('viewContent').innerHTML = '<div class="card muted">This viewer manifest contains no views.</div>';
 </script>
 </body>
 </html>
@@ -412,18 +595,9 @@ if (!findings.length) {
 
     replacements = {
         "__TITLE__": title,
-        "__OBJECT_COUNT__": str(len(objects)),
-        "__RELATION_COUNT__": str(len(relations)),
-        "__MBSE_COUNT__": str(len(mbse_ids)),
-        "__PM_COUNT__": str(len(pm_ids)),
-        "__DATA_TABLE_COUNT__": str(len(supporting_tables)),
-        "__FINDING_COUNT__": str(len(findings)),
-        "__OBJECTS_JSON__": _json_for_html(objects),
-        "__RELATIONS_JSON__": _json_for_html(relations),
-        "__FINDINGS_JSON__": _json_for_html(findings),
-        "__TABLES_JSON__": _json_for_html(supporting_tables),
-        "__MBSE_GRAPH__": mbse_graph,
-        "__DELIVERY_GRAPH__": delivery_graph,
+        "__MANIFEST_JSON__": _json_for_html(manifest),
+        "__MODEL_JSON__": _json_for_html(viewer_model),
+        "__ASSETS_JSON__": _json_for_html(embedded_assets),
     }
     for token, value in replacements.items():
         html = html.replace(token, value)

@@ -8,7 +8,7 @@ The method is intentionally not a complete implementation of SysML or any ISO/IE
 
 ## Source of truth
 
-Project Markdown files are authoritative. Generated XLSX, HTML and Mermaid files are views or exchange formats.
+Project Markdown files are authoritative. Generated XLSX, HTML, JSON, Mermaid, SVG and glTF/GLB files are views or exchange formats.
 
 A project may organize authoritative Markdown in nested directories. MBSE Lite reads Markdown recursively from the project directory, so engineering and project-management information can be physically separated while remaining part of one traceable project model.
 
@@ -128,10 +128,14 @@ The same model can be represented in different forms:
 
 - Markdown — primary human-readable project model,
 - Mermaid — graphical engineering/traceability view,
-- HTML — project overview/dashboard,
+- HTML and generated JSON — interactive project viewer and its manifest/model payload,
+- SVG — derived 2D engineering view,
+- glTF/GLB — derived 3D engineering view,
 - XLSX — LibreOffice-compatible table exchange and review format.
 
-Generated views may combine both project areas, but should preserve source paths so the distinction between MBSE and project management remains visible.
+Generated views may combine both project areas, but should preserve source paths so the distinction between MBSE and project management remains visible. Visualization elements should reference existing stable model IDs instead of defining an independent identity system. For example, an SVG element may use `data-mbse-id="PART-012"`, and a glTF node may use `extras.mbse_id` with the same value.
+
+The generated viewer manifest and renderer/selection contracts are documented in `VIEW_ARCHITECTURE.md`. Visualization output is always derived: it must not silently add requirements, decisions, geometry facts or other authoritative engineering content.
 
 ## Project management
 

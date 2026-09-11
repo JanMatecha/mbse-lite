@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_project_argument(html)
     html.add_argument("output", type=Path)
 
-    view = sub.add_parser("view", help="Generate and open a local interactive web viewer")
+    view = sub.add_parser("view", help="Generate and open a local interactive web viewer bundle")
     _add_project_argument(view)
     view.add_argument("--output", type=Path, default=None, help="Optional output HTML path")
     view.add_argument("--no-open", action="store_true", help="Generate the viewer without opening a browser")

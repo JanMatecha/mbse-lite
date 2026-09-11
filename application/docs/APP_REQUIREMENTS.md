@@ -18,6 +18,9 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-012 | The application shall support physically separated MBSE and project-management Markdown areas within one project while preserving explicit relations across those areas. | Implemented |
 | APP-REQ-013 | The local viewer shall present MBSE objects separately from project-management objects while retaining visibility of cross-area relations. | Implemented |
 | APP-REQ-014 | The local viewer shall expose supporting project Markdown tables that are not model objects or relation tables. | Implemented |
+| APP-REQ-015 | The local viewer shall derive grouped navigation and renderer selection from a generated project-independent view manifest. | Implemented |
+| APP-REQ-016 | The local viewer shall maintain one selected stable model-object ID and expose selection changes to the active view renderer. | Implemented |
+| APP-REQ-017 | View Architecture V0.1 shall define renderer contracts for Mermaid, graph, SVG and glTF views and shall keep the viewer usable when a view type is unsupported. | Implemented |
 
 ## Rule for adding requirements
 
