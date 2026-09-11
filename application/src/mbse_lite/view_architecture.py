@@ -3,13 +3,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from html import escape
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Mapping, Sequence
 
 from .core import Model, Relation, validate_model
 
 
-VIEW_SCHEMA_VERSION = "0.1"
+VIEW_SCHEMA_VERSION = "0.2"
 MBSE_AREA = "MBSE"
 PROJECT_MANAGEMENT_AREA = "Project Management"
 PM_RELATION_AREA = "Project Management / Cross-area"
@@ -29,6 +29,7 @@ SUPPORTED_VIEW_TYPES = frozenset(
         "gltf",
     }
 )
+ASSET_SOURCE_REQUIRED_VIEW_TYPES = frozenset({"mermaid", "svg", "gltf"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,15 +242,57 @@ def default_view_definitions() -> tuple[ViewDefinition, ...]:
     )
 
 
+def is_safe_view_source(source: str) -> bool:
+    """Return whether a view source is a safe bundle-relative POSIX path."""
+
+    normalized = source.replace("\\", "/")
+    relative = PurePosixPath(normalized)
+    parts = normalized.split("/")
+    return bool(
+        normalized.strip()
+        and "\x00" not in normalized
+        and not relative.is_absolute()
+        and all(part not in {"", ".", ".."} for part in parts)
+        and ":" not in parts[0]
+    )
+
+
+def validate_view_definitions(
+    views: Sequence[ViewDefinition],
+    default_view: str | None,
+) -> None:
+    """Validate the intentionally small public View manifest contract."""
+
+    seen_ids: set[str] = set()
+    for view in views:
+        if not view.id.strip():
+            raise ValueError("View IDs must not be empty")
+        if view.id in seen_ids:
+            raise ValueError(f"Duplicate view ID: {view.id}")
+        seen_ids.add(view.id)
+
+        if view.source is not None and not is_safe_view_source(view.source):
+            raise ValueError(f"View source must be a safe relative path: {view.source!r}")
+        if view.type in ASSET_SOURCE_REQUIRED_VIEW_TYPES and not view.source:
+            raise ValueError(f"View {view.id!r} of type {view.type!r} requires a source")
+
+    if default_view is not None and default_view not in seen_ids:
+        raise ValueError(f"Default view does not reference a defined view: {default_view!r}")
+
+
 def build_viewer_manifest(
     project_name: str,
     views: Sequence[ViewDefinition] | None = None,
+    *,
+    default_view: str | None = None,
 ) -> dict[str, object]:
     definitions = tuple(views) if views is not None else default_view_definitions()
+    selected_default = definitions[0].id if default_view is None and definitions else default_view
+    validate_view_definitions(definitions, selected_default)
     return {
         "schema_version": VIEW_SCHEMA_VERSION,
         "project": project_name,
-        "default_view": definitions[0].id if definitions else None,
+        "default_view": selected_default,
         "views": [view.to_manifest_entry() for view in definitions],
     }
 

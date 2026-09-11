@@ -21,6 +21,9 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-015 | The local viewer shall derive grouped navigation and renderer selection from a generated project-independent view manifest. | Implemented |
 | APP-REQ-016 | The local viewer shall maintain one selected stable model-object ID and expose selection changes to the active view renderer. | Implemented |
 | APP-REQ-017 | View Architecture V0.1 shall define renderer contracts for Mermaid, graph, SVG and glTF views and shall keep the viewer usable when a view type is unsupported. | Implemented |
+| APP-REQ-018 | The local viewer shall render generated SVG as interactive DOM content and synchronize SVG clicks and highlights through the viewer's one selected stable model-object ID. | Implemented |
+| APP-REQ-019 | The application shall sanitize generated SVG before embedding or DOM insertion by removing executable content, inline event handlers and unsafe external resource references. | Implemented |
+| APP-REQ-020 | Domain visualization generators shall derive identity and available engineering facts from the parsed Markdown model and shall identify visualization-only geometry as non-authoritative. | Implemented |
 
 ## Rule for adding requirements
 

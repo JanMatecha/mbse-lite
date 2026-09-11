@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from html import escape
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Mapping, Sequence
+from xml.etree import ElementTree
 
 from .core import Model
 from .view_architecture import (
@@ -11,7 +13,33 @@ from .view_architecture import (
     build_default_view_assets,
     build_viewer_manifest,
     build_viewer_model,
+    default_view_definitions,
+    is_safe_view_source,
 )
+from .visualization import build_generated_views
+
+
+_BLOCKED_SVG_ELEMENTS = frozenset(
+    {
+        "script",
+        "foreignobject",
+        "style",
+        "iframe",
+        "object",
+        "embed",
+        "link",
+        "meta",
+        "audio",
+        "video",
+        "image",
+        "animate",
+        "animatemotion",
+        "animatetransform",
+        "set",
+        "discard",
+    }
+)
+_SVG_URI_ATTRIBUTES = frozenset({"href", "src"})
 
 
 def _json_for_html(value: object) -> str:
@@ -26,16 +54,57 @@ def _json_for_html(value: object) -> str:
 
 
 def _asset_output_path(output_dir: Path, source: str) -> Path:
-    normalized = source.replace("\\", "/")
-    relative = PurePosixPath(normalized)
-    if (
-        not normalized
-        or relative.is_absolute()
-        or any(part in {"", ".", ".."} for part in relative.parts)
-        or ":" in relative.parts[0]
-    ):
+    if not is_safe_view_source(source):
         raise ValueError(f"View asset path must be a safe relative path: {source!r}")
-    return output_dir.joinpath(*relative.parts)
+    return output_dir.joinpath(*source.replace("\\", "/").split("/"))
+
+
+def _xml_local_name(name: str) -> str:
+    return name.rsplit("}", 1)[-1].lower()
+
+
+def _unsafe_svg_attribute(name: str, value: str) -> bool:
+    local_name = _xml_local_name(name)
+    compact_value = re.sub(r"\s+", "", value).lower()
+    if local_name == "style" or local_name.startswith("on"):
+        return True
+    if "javascript:" in compact_value:
+        return True
+    if local_name in _SVG_URI_ATTRIBUTES and value.strip() and not value.strip().startswith("#"):
+        return True
+    if re.search(r"url\s*\(", value, re.IGNORECASE) and not re.fullmatch(
+        r"\s*url\(\s*#[A-Za-z_][\w.-]*\s*\)\s*", value
+    ):
+        return True
+    return False
+
+
+def _sanitize_svg(source: str) -> str:
+    """Remove executable and externally loaded SVG constructs before export."""
+
+    if re.search(r"<!\s*(?:DOCTYPE|ENTITY)\b", source, re.IGNORECASE):
+        raise ValueError("SVG document type and entity declarations are not allowed")
+    try:
+        root = ElementTree.fromstring(source)
+    except ElementTree.ParseError as error:
+        raise ValueError(f"Invalid SVG content: {error}") from error
+    if _xml_local_name(root.tag) != "svg":
+        raise ValueError("SVG view assets must have an <svg> root element")
+
+    def clean(element: ElementTree.Element) -> None:
+        for attribute, value in list(element.attrib.items()):
+            if _unsafe_svg_attribute(attribute, value):
+                del element.attrib[attribute]
+        for child in list(element):
+            if _xml_local_name(child.tag) in _BLOCKED_SVG_ELEMENTS:
+                element.remove(child)
+            else:
+                clean(child)
+
+    clean(root)
+    ElementTree.register_namespace("", "http://www.w3.org/2000/svg")
+    ElementTree.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+    return ElementTree.tostring(root, encoding="unicode", short_empty_elements=True) + "\n"
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -61,13 +130,28 @@ def export_viewer(
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    viewer_model = build_viewer_model(model)
-    manifest = build_viewer_manifest(project_name, views)
     assets: dict[str, str | bytes] = {}
     if views is None:
+        definitions = list(default_view_definitions())
         assets.update(build_default_view_assets(model))
+        generated = build_generated_views(model)
+        definitions.extend(generated.views)
+        assets.update(generated.assets)
+    else:
+        definitions = list(views)
     if view_assets:
         assets.update(view_assets)
+
+    viewer_model = build_viewer_model(model)
+    manifest = build_viewer_manifest(project_name, definitions)
+    svg_sources = {
+        view.source for view in definitions if view.type == "svg" and view.source is not None
+    }
+    for source in svg_sources.intersection(assets):
+        content = assets[source]
+        if not isinstance(content, str):
+            raise ValueError(f"SVG view asset must be UTF-8 text: {source}")
+        assets[source] = _sanitize_svg(content)
 
     _write_json(output_path.parent / "model.json", viewer_model)
     _write_json(output_path.parent / "viewer.json", manifest)
@@ -162,6 +246,13 @@ tbody tr.object-row { cursor: pointer; }
 .data-block h3 { margin-bottom: .35rem; }
 .scaffold { border: 1px dashed var(--line); border-radius: .7rem; padding: 1.2rem; background: var(--panel); }
 .engineering-asset { display: block; width: 100%; max-height: 70vh; object-fit: contain; border: 1px solid var(--line); background: white; }
+.svg-host { overflow: auto; }
+.svg-host svg { display: block; width: 100%; max-height: 72vh; background: white; }
+.svg-host svg [data-mbse-id] { cursor: pointer; transition: filter .12s ease, opacity .12s ease; }
+.svg-host svg [data-mbse-id]:hover { filter: brightness(.96) drop-shadow(0 0 3px var(--accent)); }
+.svg-host svg [data-mbse-id].mbse-selected { filter: drop-shadow(0 0 7px var(--accent)); }
+.svg-host svg [data-mbse-id].mbse-selected:is(rect, path, line, circle, ellipse, polygon, polyline),
+.svg-host svg [data-mbse-id].mbse-selected > :is(rect, path, line, circle, ellipse, polygon, polyline) { stroke: var(--accent) !important; stroke-width: 8px !important; }
 .link-button { border: 0; padding: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; font-weight: 600; }
 details { margin-top: 1rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -453,29 +544,76 @@ function safeAssetSource(source) {
   return normalized;
 }
 
-function svgRenderer(view) {
-  let selectionNote;
+function sanitizedSvgElement(source) {
+  const parsed = new DOMParser().parseFromString(source, 'image/svg+xml');
+  if (parsed.querySelector('parsererror') || parsed.documentElement.localName.toLowerCase() !== 'svg') return null;
+  const blockedElements = new Set([
+    'script', 'foreignobject', 'style', 'iframe', 'object', 'embed', 'link', 'meta',
+    'audio', 'video', 'image', 'animate', 'animatemotion', 'animatetransform', 'set', 'discard'
+  ]);
+  const elements = [parsed.documentElement, ...parsed.documentElement.querySelectorAll('*')];
+  elements.forEach(element => {
+    if (element !== parsed.documentElement && blockedElements.has(element.localName.toLowerCase())) {
+      element.remove();
+      return;
+    }
+    [...element.attributes].forEach(attribute => {
+      const name = attribute.localName.toLowerCase();
+      const value = attribute.value;
+      const compactValue = value.replace(/\\s/g, '');
+      const lowerValue = compactValue.toLowerCase();
+      const fragmentPaint = /^url\\(#[A-Za-z_][\\w.-]*\\)$/i.test(compactValue);
+      const unsafeUri = ['href', 'src'].includes(name) && value.trim() && !value.trim().startsWith('#');
+      if (name === 'style' || name.startsWith('on') || lowerValue.includes('javascript:') ||
+          unsafeUri || (lowerValue.includes('url(') && !fragmentPaint)) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+  });
+  return document.importNode(parsed.documentElement, true);
+}
+
+function svgRenderer(view, context) {
+  let host;
+  let clickHandler;
   return {
     mount(container) {
       const source = safeAssetSource(view.source);
       container.innerHTML = `${viewHeader(view)}<div class="scaffold" data-svg-host></div>`;
-      const host = container.querySelector('[data-svg-host]');
+      host = container.querySelector('[data-svg-host]');
       if (!source) {
         host.innerHTML = '<p class="muted">SVG source is missing or unsafe.</p>';
         return;
       }
-      const image = document.createElement('img');
-      image.className = 'engineering-asset';
-      image.src = source;
-      image.alt = view.title;
-      host.appendChild(image);
-      selectionNote = document.createElement('p');
-      selectionNote.className = 'muted';
-      selectionNote.textContent = 'SVG identity convention: data-mbse-id on source elements. Selection highlighting is reserved for a later renderer revision.';
-      host.appendChild(selectionNote);
+      const svgSource = context.assets[source];
+      if (typeof svgSource !== 'string') {
+        host.innerHTML = '<p class="muted">Embedded SVG source is unavailable.</p>';
+        return;
+      }
+      const svg = sanitizedSvgElement(svgSource);
+      if (!svg) {
+        host.innerHTML = '<p class="muted">SVG source is invalid or unsafe.</p>';
+        return;
+      }
+      host.classList.add('svg-host');
+      svg.classList.add('engineering-svg');
+      host.appendChild(svg);
+      clickHandler = event => {
+        const element = event.target.closest?.('[data-mbse-id]');
+        if (element && host.contains(element)) {
+          context.setSelectedObject(element.getAttribute('data-mbse-id'));
+        }
+      };
+      host.addEventListener('click', clickHandler);
     },
     onSelectionChanged(id) {
-      if (selectionNote) selectionNote.dataset.selectedObjectId = id || '';
+      host?.querySelectorAll('[data-mbse-id]').forEach(element =>
+        element.classList.toggle('mbse-selected', element.getAttribute('data-mbse-id') === id));
+    },
+    unmount() {
+      if (host && clickHandler) host.removeEventListener('click', clickHandler);
+      host = null;
+      clickHandler = null;
     }
   };
 }
