@@ -13,6 +13,7 @@ Current POC capabilities:
 - validate IDs and traceability,
 - generate Mermaid traceability views,
 - generate static HTML overview,
+- generate and open a local interactive read-only web viewer,
 - export LibreOffice-compatible XLSX,
 - import XLSX into a reviewable Markdown directory.
 
@@ -38,6 +39,36 @@ uv run mbse-lite export-mermaid ../projects/demo_project ../generated/demo_trace
 uv run mbse-lite export-html ../projects/demo_project ../generated/demo_index.html
 uv run mbse-lite export-xlsx ../projects/demo_project ../generated/demo_model.xlsx
 ```
+
+## Local web viewer
+
+Generate the interactive viewer and open it in the default browser:
+
+```bash
+uv run mbse-lite view ../projects/demo_project
+```
+
+For the garden-tool-shed project:
+
+```bash
+uv run mbse-lite view ../projects/garden_tool_shed
+```
+
+By default the viewer is written under `../generated/<project-name>/index.html` when the project is under the repository `projects/` directory.
+
+Generate without opening the browser:
+
+```bash
+uv run mbse-lite view ../projects/garden_tool_shed --no-open
+```
+
+Or choose an explicit output path:
+
+```bash
+uv run mbse-lite view ../projects/garden_tool_shed --output ../generated/garden_tool_shed/viewer.html
+```
+
+The viewer is read-only. Markdown remains the source of truth. No continuously running Python server or database is required. Object browsing, filtering, relations and validation work directly from the generated HTML. Mermaid graph rendering uses a CDN when internet access is available; the rest of the viewer remains usable offline.
 
 ## Documentation
 
