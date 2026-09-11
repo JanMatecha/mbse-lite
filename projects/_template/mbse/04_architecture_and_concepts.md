@@ -1,11 +1,16 @@
 # Architecture and Concepts
 
+## Parts
+
+| ID | Name | Description | Status |
+|---|---|---|---|
+
 ## Concepts
 
 | ID | Name | Description | Status |
 |---|---|---|---|
 
-## Parts
+## Decisions
 
-| ID | Name | Description | Status |
-|---|---|---|---|
+| ID | Name | Decision | Rationale | Status |
+|---|---|---|---|---|

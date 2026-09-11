@@ -132,7 +132,33 @@ def test_xlsx_round_trip_to_normalized_markdown(tmp_path):
     }
 
 
-def test_web_viewer_contains_model_and_interactive_controls(tmp_path):
+def test_load_model_reads_nested_project_areas(tmp_path):
+    mbse = tmp_path / "mbse"
+    project_management = tmp_path / "project_management"
+    mbse.mkdir()
+    project_management.mkdir()
+
+    (mbse / "01_needs.md").write_text(
+        "# Needs\n\n| ID | Name | Description | Status |\n|---|---|---|---|\n| NEED-001 | Example | Example need | Draft |\n",
+        encoding="utf-8",
+    )
+    (project_management / "01_tasks.md").write_text(
+        "# Tasks\n\n| ID | Name | Owner | Status |\n|---|---|---|---|\n| TASK-001 | Review need | TBD | Planned |\n",
+        encoding="utf-8",
+    )
+    (project_management / "03_relations.md").write_text(
+        "# Project-management relations\n\n| Source | Relation | Target |\n|---|---|---|\n| TASK-001 | evaluates | NEED-001 |\n",
+        encoding="utf-8",
+    )
+
+    model = load_model(tmp_path)
+
+    assert model.objects["NEED-001"].source_file == "mbse/01_needs.md"
+    assert model.objects["TASK-001"].source_file == "project_management/01_tasks.md"
+    assert model.relations[0].source_file == "project_management/03_relations.md"
+
+
+def test_web_viewer_contains_model_and_separated_areas(tmp_path):
     model = load_model(demo_project())
     output = tmp_path / "viewer.html"
 
@@ -141,7 +167,26 @@ def test_web_viewer_contains_model_and_interactive_controls(tmp_path):
 
     assert "Demo Project" in html
     assert "MBSE Lite · local read-only viewer" in html
-    assert "objectSearch" in html
-    assert "typeFilter" in html
+    assert "Project Management" in html
+    assert "Project Data" in html
+    assert "mbseSearch" in html
+    assert "pmSearch" in html
     assert "NEED-001" in html
     assert "flowchart LR" in html
+
+
+def test_web_viewer_includes_supporting_non_object_tables(tmp_path):
+    mbse = tmp_path / "mbse"
+    mbse.mkdir()
+    (mbse / "inventory.md").write_text(
+        "# Inventory\n\n| Category | Item | Status |\n|---|---|---|\n| Machine | Battery mower | Confirmed |\n",
+        encoding="utf-8",
+    )
+
+    output = tmp_path / "viewer.html"
+    export_viewer(load_model(tmp_path), output, project_name="Supporting Data")
+    html = output.read_text(encoding="utf-8")
+
+    assert "mbse/inventory.md" in html
+    assert "Battery mower" in html
+    assert "Supporting Data" in html

@@ -2,45 +2,32 @@
 
 ## Scope
 
-These instructions apply only to `projects/garden_tool_shed/`.
+These instructions apply to `projects/garden_tool_shed/`.
 
-This directory contains engineering project data, not MBSE-lite application source code. Do not modify `application/` unless the user explicitly asks to develop the framework.
+This project has two intentionally separated working areas:
+
+- `mbse/` — system engineering and technical model,
+- `project_management/` — planning and tracking of work.
+
+Use the nested `AGENTS.md` in each area for detailed rules.
 
 ## Project objective
 
-Support the structured development of a garden tool shed from needs and requirements through concept selection, architecture, verification planning and project execution.
+Support the structured development of a garden tool shed from needs and requirements through concept selection, architecture, verification and eventual construction readiness.
 
-## Engineering rules
+## Separation rule
 
-- Markdown files in this directory are the project source of truth.
+Before editing, classify the requested change:
+
+- If it changes what the shed shall do, why, its architecture, concepts, technical decisions, verification, engineering assumptions/issues/risks or engineering data, edit `mbse/`.
+- If it changes work packages, owners, estimates, deadlines, progress or milestones, edit `project_management/`.
+- If project work is connected to engineering, preserve that connection through an explicit relation rather than duplicating engineering content in project-management files.
+
+## General rules
+
+- Markdown files are the project source of truth.
 - Preserve assigned IDs; never silently renumber them.
 - Do not invent technical facts, dimensions, materials, loads, regulations, costs or dates.
-- Record unknown but necessary information as `TBD` or create an `ISSUE-*` object.
-- Separate needs from requirements and requirements from proposed solutions.
-- Record important choices as `DEC-*` with rationale.
-- Keep explicit relations in `07_relations.md`.
-- Prefer concise engineering statements that can later be verified.
-- When adding a requirement, consider how it will be verified.
-- When proposing concepts, distinguish alternatives from selected architecture.
-- Project-management items may reference engineering objects through relations.
-
-## Initial workflow
-
-1. Clarify stakeholder/user needs.
-2. Capture site and usage constraints.
-3. Derive measurable requirements.
-4. Define functions.
-5. Generate and compare concepts.
-6. Select architecture and record decisions.
-7. Define verification and construction readiness.
-8. Track tasks, issues, risks and milestones.
-
-## Codex behavior
-
-When asked to update the project:
-
-1. inspect existing project files first,
-2. make the smallest coherent change,
-3. maintain traceability,
-4. flag missing information rather than guessing,
-5. validate the project with MBSE-lite when available.
+- Record unknown technical information as `TBD` or an engineering `ISSUE-*`.
+- Keep cross-area traceability explicit.
+- Validate the whole project with MBSE Lite after coherent changes when available.

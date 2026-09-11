@@ -8,7 +8,8 @@ These instructions apply to `application/` only. This directory contains reusabl
 
 - Markdown project files are the authoritative project model.
 - Python parses and validates the Markdown model.
-- Relations are explicit and machine-readable.
+- Project Markdown may be organized recursively into separate `mbse/` and `project_management/` areas.
+- Relations are explicit and machine-readable and may cross project-area boundaries.
 - Mermaid, HTML and XLSX are generated views/exchange formats.
 - Keep the implementation small, transparent and easy to inspect.
 - Keep future SysML v2 mapping possible, but do not implement a full SysML parser unless explicitly required.
@@ -20,7 +21,7 @@ These instructions apply to `application/` only. This directory contains reusabl
 - Do not add a database, server, web framework or heavy dependency without a demonstrated project need.
 - Do not silently change the Markdown model contract; document model-format changes in `docs/MBSE_METHOD.md`.
 - Application requirements belong in `docs/APP_REQUIREMENTS.md`, not in technical project requirement files.
-- Preserve backwards compatibility for existing project Markdown when practical.
+- Preserve backwards compatibility for existing flat project Markdown where practical.
 - Treat `../projects/demo_project` as a regression fixture, not as a place for real private project data.
 
 ## Workflow for a new capability

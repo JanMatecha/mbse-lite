@@ -87,10 +87,11 @@ def parse_markdown_tables(path: Path) -> list[list[dict[str, str]]]:
 def load_model(project_dir: str | Path) -> Model:
     project_path = Path(project_dir)
     model = Model()
-    for md_path in sorted(project_path.glob("*.md")):
+    for md_path in sorted(project_path.rglob("*.md")):
+        relative_path = md_path.relative_to(project_path).as_posix()
         parsed_tables = parse_markdown_tables(md_path)
         for index, rows in enumerate(parsed_tables, start=1):
-            key = f"{md_path.stem}:{index}"
+            key = f"{relative_path}:{index}"
             model.tables[key] = rows
             headers = set(rows[0]) if rows else set()
             if {"Source", "Relation", "Target"}.issubset(headers):
@@ -100,7 +101,7 @@ def load_model(project_dir: str | Path) -> Model:
                             source=row.get("Source", "").strip(),
                             relation=row.get("Relation", "").strip(),
                             target=row.get("Target", "").strip(),
-                            source_file=md_path.name,
+                            source_file=relative_path,
                         )
                     )
                 continue
@@ -116,7 +117,7 @@ def load_model(project_dir: str | Path) -> Model:
                     id=object_id,
                     type=object_type,
                     attributes={k: v for k, v in row.items() if k != "ID"},
-                    source_file=md_path.name,
+                    source_file=relative_path,
                 )
                 if object_id in model.objects:
                     model.duplicate_ids.append(object_id)
