@@ -1,23 +1,44 @@
 # Project Template
 
-Copy this directory to `projects/<your_project_name>/` before starting a new technical project.
+Copy this directory to `projects/<project_name>/`, then customize it before adding real engineering data.
 
-## First actions
+## Structure
 
-1. Rename the project directory.
-2. Replace this README with the project's purpose, scope, stakeholders and current status.
-3. Customize `AGENTS.md` with project-specific rules and constraints.
-4. Keep, remove or split the model files according to the project's needs.
-5. Never leave placeholder text that could be mistaken for real engineering data.
+```text
+<project_name>/
+├── README.md
+├── AGENTS.md
+├── mbse/
+│   ├── AGENTS.md
+│   ├── 01_needs.md
+│   ├── 02_requirements.md
+│   ├── 03_functions.md
+│   ├── 04_architecture_and_concepts.md
+│   ├── 05_verification.md
+│   ├── 06_engineering_issues_and_risks.md
+│   └── 07_relations.md
+└── project_management/
+    ├── AGENTS.md
+    ├── 01_tasks.md
+    ├── 02_milestones.md
+    └── 03_relations.md
+```
 
-## Suggested files
+## Separation rule
 
-- `01_needs.md` — stakeholder/user needs and problem statements.
-- `02_requirements.md` — verifiable requirements.
-- `03_functions.md` — required functions/actions.
-- `04_architecture_and_concepts.md` — candidate concepts, parts and architecture.
-- `05_verification.md` — tests, analyses, inspections or demonstrations.
-- `06_project_management.md` — decisions, risks, issues, tasks and milestones.
-- `07_relations.md` — explicit machine-readable relations between model objects.
+Use `mbse/` for the technical/system model: needs, requirements, functions, architecture, concepts, technical decisions, verification, engineering issues/risks and supporting technical data.
 
-This structure is a starting convention, not a requirement. Each project may evolve its own structure while preserving stable IDs and explicit relations when MBSE Lite automation is used.
+Use `project_management/` for execution planning: tasks, owners, estimates, deadlines, progress, milestones and relations from work items to engineering objects.
+
+Do not duplicate engineering facts into project-management files. Reference stable IDs instead.
+
+## Starting a new project
+
+1. Rename the copied directory.
+2. Replace this README with project purpose, scope, stakeholders and status.
+3. Customize the root and nested `AGENTS.md` files.
+4. Remove unused sections only when you are sure they are not needed.
+5. Add project-specific engineering files under `mbse/` as useful.
+6. Preserve stable IDs and explicit relations when automation is desired.
+
+The file names are a recommended convention, not a rigid schema.
