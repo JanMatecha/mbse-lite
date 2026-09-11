@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from html import escape
 from pathlib import Path
@@ -21,6 +22,8 @@ OBJECT_PREFIXES = {
     "TASK": "Task",
     "MS": "Milestone",
 }
+
+OBJECT_ID_PATTERN = re.compile(r"^(?P<prefix>[A-Z]+)-[0-9]{3}$")
 
 
 @dataclass(slots=True)
@@ -127,6 +130,13 @@ def validate_model(model: Model) -> list[tuple[str, str]]:
     for object_id in model.duplicate_ids:
         findings.append(("ERROR", f"Duplicate ID: {object_id}"))
 
+    for obj in model.objects.values():
+        match = OBJECT_ID_PATTERN.fullmatch(obj.id)
+        if match is None:
+            findings.append(("ERROR", f"Invalid ID format: {obj.id}; expected PREFIX-NNN"))
+        elif match.group("prefix") not in OBJECT_PREFIXES:
+            findings.append(("ERROR", f"Unknown ID prefix: {match.group('prefix')} in {obj.id}"))
+
     for rel in model.relations:
         if rel.source not in model.objects:
             findings.append(("ERROR", f"Unknown relation source {rel.source} in {rel.source_file}"))
@@ -143,14 +153,25 @@ def validate_model(model: Model) -> list[tuple[str, str]]:
 
     for obj in model.objects.values():
         if obj.type == "Requirement":
-            if not incoming.get(obj.id):
-                findings.append(("WARNING", f"Requirement {obj.id} has no incoming traceability relation"))
-            if not outgoing.get(obj.id):
-                findings.append(("WARNING", f"Requirement {obj.id} has no outgoing traceability relation"))
-            if not any(rel.relation in {"verified_by", "verify", "verifiedBy"} for rel in outgoing.get(obj.id, [])):
-                findings.append(("WARNING", f"Requirement {obj.id} has no verification relation"))
-        if obj.type == "Function" and not outgoing.get(obj.id):
-            findings.append(("WARNING", f"Function {obj.id} is not realized by another model object"))
+            has_need_derivation = any(
+                rel.relation == "derives"
+                and (source := model.objects.get(rel.source)) is not None
+                and source.type == "Need"
+                for rel in incoming.get(obj.id, [])
+            )
+            if not has_need_derivation:
+                findings.append(("WARNING", f"Requirement {obj.id} has no incoming derives relation from a Need"))
+
+            requirement_relations = {rel.relation for rel in outgoing.get(obj.id, [])}
+            if "satisfied_by" not in requirement_relations:
+                findings.append(("WARNING", f"Requirement {obj.id} has no outgoing satisfied_by relation"))
+            if "verified_by" not in requirement_relations:
+                findings.append(("WARNING", f"Requirement {obj.id} has no outgoing verified_by relation"))
+
+        if obj.type == "Function" and not any(
+            rel.relation == "realized_by" for rel in outgoing.get(obj.id, [])
+        ):
+            findings.append(("WARNING", f"Function {obj.id} has no outgoing realized_by relation"))
 
     return findings
 

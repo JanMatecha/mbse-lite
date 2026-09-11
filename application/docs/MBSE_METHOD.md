@@ -44,6 +44,8 @@ PREFIX-NNN
 
 Examples: `REQ-001`, `FUN-004`, `DEC-002`.
 
+`PREFIX` must be one of the prefixes in the Object types table above and `NNN` must be exactly three decimal digits. Unknown prefixes and any other ID format are validation errors.
+
 IDs should not be reused after an object is deleted or deprecated.
 
 ## Relations
@@ -78,13 +80,14 @@ The vocabulary is deliberately small in the POC. New relation types should be ad
 
 The tool checks at least:
 
-1. object IDs are unique,
-2. relation sources and targets exist,
-3. requirements have incoming and outgoing traceability,
-4. requirements have verification relations,
-5. functions have a realization relation.
+1. every object ID has the exact `PREFIX-NNN` format, uses a documented prefix and is unique,
+2. relation sources and targets exist and relation types are not empty,
+3. every requirement has an incoming `derives` relation whose source is a Need,
+4. every requirement has at least one outgoing `satisfied_by` relation,
+5. every requirement has at least one outgoing `verified_by` relation,
+6. every function has at least one outgoing `realized_by` relation.
 
-Warnings indicate incomplete engineering work; errors indicate an inconsistent model.
+ID format, prefix, uniqueness and broken relation-reference findings are errors because they make the model structurally inconsistent. Missing semantic traceability from rules 3–6 is a warning because it can represent incomplete engineering work. Relation names are matched exactly; a different or generic relation does not satisfy these checks.
 
 ## Views
 

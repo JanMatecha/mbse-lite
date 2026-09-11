@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from mbse_lite.core import (
+    Model,
+    ModelObject,
+    Relation,
     export_xlsx,
     import_xlsx_to_markdown,
     load_model,
@@ -12,6 +15,10 @@ from mbse_lite.viewer import export_viewer
 
 def demo_project() -> Path:
     return Path(__file__).resolve().parents[2] / "projects" / "demo_project"
+
+
+def finding_messages(model: Model, severity: str) -> list[str]:
+    return [message for level, message in validate_model(model) if level == severity]
 
 
 def test_demo_project_loads_and_validates():
@@ -26,6 +33,79 @@ def test_demo_project_loads_and_validates():
 
     errors = [message for severity, message in validate_model(model) if severity == "ERROR"]
     assert errors == []
+
+
+def test_invalid_id_format_is_an_error():
+    model = Model(objects={"REQ-01": ModelObject(id="REQ-01", type="Requirement")})
+
+    assert "Invalid ID format: REQ-01; expected PREFIX-NNN" in finding_messages(model, "ERROR")
+
+
+def test_unknown_id_prefix_is_an_error():
+    model = Model(objects={"UNKNOWN-001": ModelObject(id="UNKNOWN-001", type="Unknown")})
+
+    assert "Unknown ID prefix: UNKNOWN in UNKNOWN-001" in finding_messages(model, "ERROR")
+
+
+def test_duplicate_id_remains_an_error():
+    model = Model(
+        objects={"NEED-001": ModelObject(id="NEED-001", type="Need")},
+        duplicate_ids=["NEED-001"],
+    )
+
+    assert "Duplicate ID: NEED-001" in finding_messages(model, "ERROR")
+
+
+def test_function_with_different_outgoing_relation_still_warns_about_realization():
+    model = Model(
+        objects={
+            "FUN-001": ModelObject(id="FUN-001", type="Function"),
+            "PART-001": ModelObject(id="PART-001", type="Part"),
+        },
+        relations=[Relation(source="FUN-001", relation="connects_to", target="PART-001")],
+    )
+
+    assert "Function FUN-001 has no outgoing realized_by relation" in finding_messages(model, "WARNING")
+
+
+def test_generic_relations_do_not_replace_required_requirement_traceability():
+    model = Model(
+        objects={
+            "NEED-001": ModelObject(id="NEED-001", type="Need"),
+            "REQ-001": ModelObject(id="REQ-001", type="Requirement"),
+            "FUN-001": ModelObject(id="FUN-001", type="Function"),
+        },
+        relations=[
+            Relation(source="NEED-001", relation="connects_to", target="REQ-001"),
+            Relation(source="REQ-001", relation="connects_to", target="FUN-001"),
+            Relation(source="FUN-001", relation="realized_by", target="REQ-001"),
+        ],
+    )
+
+    warnings = finding_messages(model, "WARNING")
+    assert "Requirement REQ-001 has no incoming derives relation from a Need" in warnings
+    assert "Requirement REQ-001 has no outgoing satisfied_by relation" in warnings
+    assert "Requirement REQ-001 has no outgoing verified_by relation" in warnings
+
+
+def test_valid_model_has_no_validation_findings():
+    model = Model(
+        objects={
+            "NEED-001": ModelObject(id="NEED-001", type="Need"),
+            "REQ-001": ModelObject(id="REQ-001", type="Requirement"),
+            "FUN-001": ModelObject(id="FUN-001", type="Function"),
+            "PART-001": ModelObject(id="PART-001", type="Part"),
+            "VER-001": ModelObject(id="VER-001", type="Verification"),
+        },
+        relations=[
+            Relation(source="NEED-001", relation="derives", target="REQ-001"),
+            Relation(source="REQ-001", relation="satisfied_by", target="FUN-001"),
+            Relation(source="REQ-001", relation="verified_by", target="VER-001"),
+            Relation(source="FUN-001", relation="realized_by", target="PART-001"),
+        ],
+    )
+
+    assert validate_model(model) == []
 
 
 def test_mermaid_contains_traceability_edges():
