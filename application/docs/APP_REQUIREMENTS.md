@@ -24,6 +24,11 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-018 | The local viewer shall render generated SVG as interactive DOM content and synchronize SVG clicks and highlights through the viewer's one selected stable model-object ID. | Implemented |
 | APP-REQ-019 | The application shall sanitize generated SVG before embedding or DOM insertion by removing executable content, inline event handlers and unsafe external resource references. | Implemented |
 | APP-REQ-020 | Domain visualization generators shall derive identity and available engineering facts from the parsed Markdown model and shall identify visualization-only geometry as non-authoritative. | Implemented |
+| APP-REQ-021 | Visualization generators and viewer export shall support safe bundle-relative text and binary assets without allowing asset paths to escape the generated output directory. | Implemented |
+| APP-REQ-022 | The local viewer shall render generated glTF/GLB engineering views with orbit, zoom, pan and automatic model framing when the pinned Three.js modules are available. | Implemented |
+| APP-REQ-023 | Interactive 3D objects shall use existing stable model IDs through `node.extras.mbse_id` and shall synchronize picking and highlighting through the viewer-owned selected object ID. | Implemented |
+| APP-REQ-024 | Generated GLB data required for direct `file://` viewing shall be safely encoded in the HTML bundle and parsed without fetching the sibling GLB file. | Implemented |
+| APP-REQ-025 | Failure to load the optional browser-side 3D dependency shall remain local to the 3D view and shall not prevent access to other viewer views. | Implemented |
 
 ## Rule for adding requirements
 

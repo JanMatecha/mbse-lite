@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 from html import escape
@@ -123,8 +124,8 @@ def export_viewer(
 
     ``output`` remains the HTML path for backwards compatibility. The bundle
     also contains sibling ``model.json``, ``viewer.json`` and referenced view
-    assets. Text assets are embedded in the HTML so the viewer still works when
-    opened directly through ``file://``.
+    assets. Text assets and selected binary renderer assets are embedded in the
+    HTML so the viewer still works when opened directly through ``file://``.
     """
 
     output_path = Path(output)
@@ -166,6 +167,16 @@ def export_viewer(
 
     embedded_assets = {
         source: content for source, content in assets.items() if isinstance(content, str)
+    }
+    gltf_sources = {
+        view.source
+        for view in definitions
+        if view.type == "gltf" and view.source is not None
+    }
+    embedded_binary_assets = {
+        source: base64.b64encode(content).decode("ascii")
+        for source, content in assets.items()
+        if isinstance(content, bytes) and source in gltf_sources
     }
     title = escape(project_name)
 
@@ -253,6 +264,10 @@ tbody tr.object-row { cursor: pointer; }
 .svg-host svg [data-mbse-id].mbse-selected { filter: drop-shadow(0 0 7px var(--accent)); }
 .svg-host svg [data-mbse-id].mbse-selected:is(rect, path, line, circle, ellipse, polygon, polyline),
 .svg-host svg [data-mbse-id].mbse-selected > :is(rect, path, line, circle, ellipse, polygon, polyline) { stroke: var(--accent) !important; stroke-width: 8px !important; }
+.gltf-host { position: relative; min-height: 440px; height: min(72vh, 680px); padding: 0; overflow: hidden; background: #eef1f5; }
+.gltf-host canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.gltf-host canvas:active { cursor: grabbing; }
+.gltf-status { position: absolute; inset: auto 1rem 1rem 1rem; margin: 0; padding: .65rem .8rem; border-radius: .5rem; background: color-mix(in srgb, var(--panel) 90%, transparent); color: var(--muted); pointer-events: none; }
 .link-button { border: 0; padding: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; font-weight: 600; }
 details { margin-top: 1rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -270,7 +285,32 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   .detail dl { grid-template-columns: 1fr; }
 }
 </style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
 <script type="module">
+window.mbseThreeReady = (async () => {
+  try {
+    const [THREE, loaderModule, controlsModule] = await Promise.all([
+      import('three'),
+      import('three/addons/loaders/GLTFLoader.js'),
+      import('three/addons/controls/OrbitControls.js')
+    ]);
+    return {
+      THREE,
+      GLTFLoader: loaderModule.GLTFLoader,
+      OrbitControls: controlsModule.OrbitControls
+    };
+  } catch (error) {
+    console.info('Three.js could not be loaded. Other viewer views remain available.', error);
+    return null;
+  }
+})();
 window.mbseMermaidReady = (async () => {
   try {
     const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
@@ -299,10 +339,11 @@ window.mbseMermaidReady = (async () => {
     <div id="objectDetail" class="detail muted">Select an object to inspect its attributes and direct relations.</div>
   </aside>
 </div>
-<script>
+<script type="module">
 const viewerManifest = __MANIFEST_JSON__;
 const viewerModel = __MODEL_JSON__;
 const embeddedViewAssets = __ASSETS_JSON__;
+const embeddedBinaryViewAssets = __BINARY_ASSETS_JSON__;
 
 const objects = viewerModel.objects;
 const relations = viewerModel.relations;
@@ -544,6 +585,15 @@ function safeAssetSource(source) {
   return normalized;
 }
 
+function base64ToArrayBuffer(encoded) {
+  const decoded = atob(encoded);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
+
 function sanitizedSvgElement(source) {
   const parsed = new DOMParser().parseFromString(source, 'image/svg+xml');
   if (parsed.querySelector('parsererror') || parsed.documentElement.localName.toLowerCase() !== 'svg') return null;
@@ -618,11 +668,255 @@ function svgRenderer(view, context) {
   };
 }
 
+function gltfRenderer(view, context) {
+  let host;
+  let status;
+  let renderer;
+  let scene;
+  let camera;
+  let controls;
+  let modelRoot;
+  let grid;
+  let raycaster;
+  let pointerHandler;
+  let resizeObserver;
+  let animationFrame = 0;
+  let selectedId = null;
+  let disposed = false;
+  let THREE;
+  const highlightedMaterials = new Map();
+
+  function setStatus(message) {
+    if (!host) return;
+    if (!status || !host.contains(status)) {
+      status = document.createElement('p');
+      status.className = 'gltf-status';
+      host.appendChild(status);
+    }
+    status.textContent = message;
+  }
+
+  function resolveMbseId(object) {
+    let current = object;
+    while (current) {
+      if (current.userData?.mbse_id) return String(current.userData.mbse_id);
+      current = current.parent;
+    }
+    return null;
+  }
+
+  function restoreHighlights() {
+    highlightedMaterials.forEach((original, mesh) => {
+      const highlighted = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      highlighted.forEach(material => material?.dispose?.());
+      mesh.material = original;
+    });
+    highlightedMaterials.clear();
+  }
+
+  function highlightedMaterial(material) {
+    const clone = material.clone();
+    if (clone.emissive) {
+      clone.emissive.setHex(0x2f7df6);
+      clone.emissiveIntensity = 0.8;
+    } else if (clone.color) {
+      clone.color.lerp(new THREE.Color(0x2f7df6), 0.45);
+    }
+    return clone;
+  }
+
+  function applyHighlight(id) {
+    restoreHighlights();
+    if (!id || !modelRoot) return;
+    modelRoot.traverse(object => {
+      if (!object.isMesh || resolveMbseId(object) !== id) return;
+      const original = object.material;
+      highlightedMaterials.set(object, original);
+      object.material = Array.isArray(original)
+        ? original.map(highlightedMaterial)
+        : highlightedMaterial(original);
+    });
+  }
+
+  function resize() {
+    if (!host || !renderer || !camera) return;
+    const width = Math.max(host.clientWidth, 1);
+    const height = Math.max(host.clientHeight, 1);
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+
+  function renderLoop() {
+    if (disposed || !renderer || !scene || !camera) return;
+    animationFrame = requestAnimationFrame(renderLoop);
+    controls?.update();
+    renderer.render(scene, camera);
+  }
+
+  function disposeSceneResources() {
+    restoreHighlights();
+    const geometries = new Set();
+    const materials = new Set();
+    modelRoot?.traverse(object => {
+      if (object.geometry) geometries.add(object.geometry);
+      const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+      objectMaterials.filter(Boolean).forEach(material => materials.add(material));
+    });
+    geometries.forEach(geometry => geometry.dispose());
+    materials.forEach(material => material.dispose());
+    grid?.geometry?.dispose();
+    grid?.material?.dispose();
+  }
+
+  function cleanupRenderer() {
+    if (animationFrame) cancelAnimationFrame(animationFrame);
+    animationFrame = 0;
+    resizeObserver?.disconnect();
+    if (renderer?.domElement && pointerHandler) {
+      renderer.domElement.removeEventListener('pointerdown', pointerHandler);
+    }
+    controls?.dispose();
+    disposeSceneResources();
+    renderer?.dispose();
+    renderer?.forceContextLoss?.();
+    renderer = null;
+    scene = null;
+    camera = null;
+    controls = null;
+    modelRoot = null;
+    grid = null;
+    raycaster = null;
+    pointerHandler = null;
+    resizeObserver = null;
+  }
+
+  async function initialize(modules, arrayBuffer) {
+    THREE = modules.THREE;
+    const { GLTFLoader, OrbitControls } = modules;
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xeef1f5);
+    camera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    host.replaceChildren(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xf8fbff, 0x53606c, 2.2));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
+    keyLight.position.set(5, 8, 6);
+    scene.add(keyLight);
+
+    const loader = new GLTFLoader();
+    const gltf = await new Promise((resolve, reject) =>
+      loader.parse(arrayBuffer, '', resolve, reject));
+    if (disposed) return;
+    modelRoot = gltf.scene;
+    modelRoot.traverse(object => {
+      if (object.userData?.mbse_id) object.userData.mbse_id = String(object.userData.mbse_id);
+    });
+    scene.add(modelRoot);
+
+    const bounds = new THREE.Box3().setFromObject(modelRoot);
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    const maxDimension = Math.max(size.x, size.y, size.z, 1);
+    camera.near = Math.max(maxDimension / 1000, 0.01);
+    camera.far = maxDimension * 100;
+    camera.position.set(
+      center.x + maxDimension * 1.15,
+      center.y + maxDimension * 0.85,
+      center.z + maxDimension * 1.35
+    );
+    camera.lookAt(center);
+    camera.updateProjectionMatrix();
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.copy(center);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.enablePan = true;
+    controls.update();
+
+    grid = new THREE.GridHelper(maxDimension * 2, 20, 0x8d99a8, 0xc6cdd6);
+    grid.position.y = -0.005;
+    scene.add(grid);
+
+    raycaster = new THREE.Raycaster();
+    pointerHandler = event => {
+      if (event.button !== 0 || !modelRoot) return;
+      const bounds = renderer.domElement.getBoundingClientRect();
+      const pointer = new THREE.Vector2(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1
+      );
+      raycaster.setFromCamera(pointer, camera);
+      for (const intersection of raycaster.intersectObject(modelRoot, true)) {
+        const mbseId = resolveMbseId(intersection.object);
+        if (mbseId) {
+          context.setSelectedObject(mbseId);
+          return;
+        }
+      }
+    };
+    renderer.domElement.addEventListener('pointerdown', pointerHandler);
+    resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(host);
+    resize();
+    applyHighlight(selectedId);
+    renderLoop();
+  }
+
+  return {
+    mount(container) {
+      disposed = false;
+      const source = safeAssetSource(view.source);
+      container.innerHTML = `${viewHeader(view)}<div class="scaffold gltf-host" data-gltf-host><p class="gltf-status">Loading conceptual 3D view…</p></div>`;
+      host = container.querySelector('[data-gltf-host]');
+      status = host.querySelector('.gltf-status');
+      if (!source) {
+        setStatus('GLB source is missing or unsafe.');
+        return;
+      }
+      const encoded = context.binaryAssets[source];
+      if (typeof encoded !== 'string') {
+        setStatus('Embedded GLB data is unavailable.');
+        return;
+      }
+      const arrayBuffer = base64ToArrayBuffer(encoded);
+      Promise.resolve(window.mbseThreeReady).then(async modules => {
+        if (disposed) return;
+        if (!modules) {
+          setStatus('Three.js could not be loaded. Check network access; other viewer views remain available.');
+          return;
+        }
+        try {
+          await initialize(modules, arrayBuffer);
+        } catch (error) {
+          console.error('The conceptual GLB view could not be rendered.', error);
+          cleanupRenderer();
+          if (!disposed) setStatus('The conceptual 3D model could not be rendered. Other viewer views remain available.');
+        }
+      });
+    },
+    onSelectionChanged(id) {
+      selectedId = id;
+      applyHighlight(id);
+    },
+    unmount() {
+      disposed = true;
+      cleanupRenderer();
+      host = null;
+      status = null;
+    }
+  };
+}
+
 function scaffoldRenderer(kind) {
   let selectionValue;
   return (view) => ({
     mount(container) {
-      container.innerHTML = `${viewHeader(view)}<div class="scaffold"><p><strong>${escapeHtml(kind)} renderer contract is available; interactive rendering is not implemented in V0.1.</strong></p><p class="muted">Source: ${escapeHtml(view.source || '(not specified)')}</p><p class="muted" data-selection-value>No object selected.</p></div>`;
+      container.innerHTML = `${viewHeader(view)}<div class="scaffold"><p><strong>${escapeHtml(kind)} renderer is not available in this viewer.</strong></p><p class="muted">Source: ${escapeHtml(view.source || '(not specified)')}</p><p class="muted" data-selection-value>No object selected.</p></div>`;
       selectionValue = container.querySelector('[data-selection-value]');
     },
     onSelectionChanged(id) {
@@ -648,13 +942,14 @@ const rendererFactories = {
   mermaid: mermaidRenderer,
   graph: scaffoldRenderer('Graph'),
   svg: svgRenderer,
-  gltf: scaffoldRenderer('glTF')
+  gltf: gltfRenderer
 };
 
 const viewerContext = {
   model: viewerModel,
   manifest: viewerManifest,
   assets: embeddedViewAssets,
+  binaryAssets: embeddedBinaryViewAssets,
   setSelectedObject,
   getSelectedObjectId: () => selectedObjectId
 };
@@ -736,6 +1031,7 @@ else document.getElementById('viewContent').innerHTML = '<div class="card muted"
         "__MANIFEST_JSON__": _json_for_html(manifest),
         "__MODEL_JSON__": _json_for_html(viewer_model),
         "__ASSETS_JSON__": _json_for_html(embedded_assets),
+        "__BINARY_ASSETS_JSON__": _json_for_html(embedded_binary_assets),
     }
     for token, value in replacements.items():
         html = html.replace(token, value)

@@ -9,7 +9,7 @@ def build_generated_views(model: Model) -> GeneratedViews:
     """Run the small registry of optional domain visualization generators."""
 
     views = []
-    assets: dict[str, str] = {}
+    assets: dict[str, str | bytes] = {}
     for generator in (generate_garden_shed_views,):
         generated = generator(model)
         if generated is None:

@@ -1,4 +1,6 @@
+import base64
 import json
+import struct
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -13,6 +15,7 @@ from mbse_lite.view_architecture import (
     build_viewer_manifest,
 )
 from mbse_lite.viewer import export_viewer
+from mbse_lite.visualization import build_generated_views
 
 
 def demo_project() -> Path:
@@ -23,10 +26,20 @@ def garden_shed_project() -> Path:
     return Path(__file__).resolve().parents[2] / "projects" / "garden_tool_shed"
 
 
+def glb_json(glb: bytes) -> dict[str, object]:
+    magic, version, total_length = struct.unpack_from("<4sII", glb)
+    json_length, json_type = struct.unpack_from("<I4s", glb, 12)
+    assert magic == b"glTF"
+    assert version == 2
+    assert total_length == len(glb)
+    assert json_type == b"JSON"
+    return json.loads(glb[20 : 20 + json_length].decode("utf-8").rstrip(" "))
+
+
 def test_default_manifest_defines_grouped_navigation_and_asset_views():
     manifest = build_viewer_manifest("demo_project")
 
-    assert manifest["schema_version"] == "0.2"
+    assert manifest["schema_version"] == "0.3"
     assert manifest["project"] == "demo_project"
     assert manifest["default_view"] == "overview"
     assert [view["id"] for view in manifest["views"]] == [
@@ -117,6 +130,53 @@ def test_garden_shed_bundle_contains_interactive_floor_plan_with_model_ids(tmp_p
     assert "Preferred candidates shown: CON-007, CON-010" in svg_text
 
 
+def test_garden_shed_registry_emits_binary_glb_with_stable_model_ids():
+    model = load_model(garden_shed_project())
+
+    generated = build_generated_views(model)
+
+    glb = generated.assets["views/model.glb"]
+    assert isinstance(glb, bytes)
+    assert build_generated_views(model).assets["views/model.glb"] == glb
+    document = glb_json(glb)
+    mapped_ids = {
+        node.get("extras", {}).get("mbse_id")
+        for node in document["nodes"]
+        if node.get("extras", {}).get("mbse_id")
+    }
+    assert mapped_ids == {
+        "PART-001",
+        "PART-004",
+        "PART-005",
+        "PART-008",
+        "PART-010",
+        "PART-011",
+        "PART-012",
+    }
+    assert mapped_ids <= set(model.objects)
+
+
+def test_garden_shed_bundle_contains_conceptual_3d_manifest_and_embedded_glb(tmp_path):
+    output = tmp_path / "index.html"
+    export_viewer(load_model(garden_shed_project()), output, project_name="garden_tool_shed")
+
+    manifest = json.loads((tmp_path / "viewer.json").read_text(encoding="utf-8"))
+    model_view = next(view for view in manifest["views"] if view["id"] == "conceptual-3d")
+    glb = (tmp_path / "views" / "model.glb").read_bytes()
+    html = output.read_text(encoding="utf-8")
+
+    assert model_view["title"] == "3D"
+    assert model_view["group"] == "Geometry"
+    assert model_view["type"] == "gltf"
+    assert model_view["source"] == "views/model.glb"
+    assert model_view["config"]["geometry_status"] == "conceptual"
+    assert glb.startswith(b"glTF")
+    assert base64.b64encode(glb).decode("ascii") in html
+    assert "const embeddedBinaryViewAssets" in html
+    assert "base64ToArrayBuffer" in html
+    assert "fetch(view.source" not in html
+
+
 def test_svg_renderer_uses_embedded_dom_and_shared_selection_contract(tmp_path):
     output = tmp_path / "index.html"
     export_viewer(load_model(garden_shed_project()), output, project_name="garden_tool_shed")
@@ -129,6 +189,26 @@ def test_svg_renderer_uses_embedded_dom_and_shared_selection_contract(tmp_path):
     assert "context.setSelectedObject(element.getAttribute('data-mbse-id'))" in html
     assert "element.classList.toggle('mbse-selected'" in html
     assert "image.src = source" not in html
+
+
+def test_gltf_renderer_uses_three_raycasting_shared_selection_and_cleanup(tmp_path):
+    output = tmp_path / "index.html"
+    export_viewer(load_model(garden_shed_project()), output, project_name="garden_tool_shed")
+
+    html = output.read_text(encoding="utf-8")
+
+    assert "three@0.180.0" in html
+    assert "new GLTFLoader()" in html
+    assert ".parse(arrayBuffer" in html
+    assert "new THREE.Raycaster()" in html
+    assert "context.setSelectedObject(mbseId)" in html
+    assert "function restoreHighlights()" in html
+    assert "onSelectionChanged(id)" in html
+    assert "removeEventListener('pointerdown'" in html
+    assert "cancelAnimationFrame(animationFrame)" in html
+    assert "controls?.dispose()" in html
+    assert "renderer?.dispose()" in html
+    assert "Three.js could not be loaded" in html
 
 
 def test_svg_is_sanitized_before_file_and_html_emission(tmp_path):
@@ -218,6 +298,31 @@ def test_view_asset_cannot_escape_output_directory(tmp_path):
             views=[],
             view_assets={"../outside.svg": "<svg/>",},
         )
+
+
+def test_binary_view_asset_cannot_escape_output_directory(tmp_path):
+    with pytest.raises(ValueError, match="safe relative path"):
+        export_viewer(
+            Model(),
+            tmp_path / "index.html",
+            views=[],
+            view_assets={"../outside.glb": b"glTF"},
+        )
+
+
+def test_unreferenced_binary_asset_is_written_but_not_embedded(tmp_path):
+    payload = b"\x00binary-attachment\xff"
+    output = tmp_path / "index.html"
+
+    export_viewer(
+        Model(),
+        output,
+        views=[],
+        view_assets={"views/attachment.bin": payload},
+    )
+
+    assert (tmp_path / "views" / "attachment.bin").read_bytes() == payload
+    assert base64.b64encode(payload).decode("ascii") not in output.read_text(encoding="utf-8")
 
 
 def test_manifest_rejects_duplicate_and_empty_view_ids():

@@ -45,7 +45,7 @@ Create a new project by copying `projects/_template/` and then tailoring its fil
 
 ## Source of truth
 
-For each technical project, Markdown files inside that project directory are the source of truth. Mermaid, HTML and XLSX are generated views or exchange formats.
+For each technical project, Markdown files inside that project directory are the source of truth. Mermaid, HTML, SVG, GLB and XLSX are generated views or exchange formats.
 
 ## Privacy
 

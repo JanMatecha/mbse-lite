@@ -9,7 +9,7 @@ from typing import Mapping, Sequence
 from .core import Model, Relation, validate_model
 
 
-VIEW_SCHEMA_VERSION = "0.2"
+VIEW_SCHEMA_VERSION = "0.3"
 MBSE_AREA = "MBSE"
 PROJECT_MANAGEMENT_AREA = "Project Management"
 PM_RELATION_AREA = "Project Management / Cross-area"

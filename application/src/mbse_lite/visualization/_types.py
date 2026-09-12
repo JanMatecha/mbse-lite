@@ -8,7 +8,7 @@ from ..view_architecture import ViewDefinition
 
 @dataclass(frozen=True, slots=True)
 class GeneratedViews:
-    """Views and text assets contributed by one domain visualization generator."""
+    """Views and text or binary assets contributed by one visualization generator."""
 
     views: tuple[ViewDefinition, ...] = ()
-    assets: Mapping[str, str] = field(default_factory=dict)
+    assets: Mapping[str, str | bytes] = field(default_factory=dict)
