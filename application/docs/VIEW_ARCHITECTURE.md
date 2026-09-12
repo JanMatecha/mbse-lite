@@ -1,10 +1,10 @@
-# View Architecture V0.3
+# View Architecture V0.4
 
 ## Purpose
 
 A **View** is one representation of the shared MBSE Lite model. A view does not own engineering identity or become a second model: it references objects through the same stable IDs used in the authoritative Markdown.
 
-View Architecture V0.3 separates three concerns:
+View Architecture V0.4 separates three concerns:
 
 1. Markdown parsing produces the internal MBSE model.
 2. generation produces a renderer-neutral `model.json`, a navigation-oriented `viewer.json` and any view assets,
@@ -25,6 +25,12 @@ generated/<project>/
 ├── index.html
 ├── model.json
 ├── viewer.json
+├── assets/
+│   └── vendor/
+│       ├── three-viewer-0.180.0.min.js
+│       ├── mermaid-11.17.2.min.js
+│       ├── manifest.json
+│       └── *-LICENSE.txt
 └── views/
     ├── traceability.mmd
     ├── delivery-traceability.mmd
@@ -34,15 +40,17 @@ generated/<project>/
 
 `index.html` embeds the JSON payload and text assets as a direct-file fallback, so the viewer does not require a server. Binary assets remain distinct: only binary files referenced by `gltf` views are base64-encoded into the HTML. The renderer decodes the embedded value to an `ArrayBuffer` and passes it directly to `GLTFLoader.parse`, avoiding a `file://` fetch. Sibling files remain useful to tools and later generators.
 
+Pinned browser dependencies are copied from Python package resources into `assets/vendor/`. The HTML loads them as classic sibling scripts, not through `fetch()`, dynamic imports or an import map. This avoids local ES-module origin restrictions that differ across browsers and keeps double-click `file://` use as the default workflow.
+
 `model.json` contains objects, relations, supporting tables, validation findings and summary counts. Each object includes its stable `id`, source file and MBSE/project-management area. `viewer.json` describes available views and grouped navigation. The garden-shed generator contributes both `floorplan.svg` and `model.glb`; both render under direct file opening through their separate text and binary embedding paths.
 
 ## Viewer manifest schema
 
-The V0.3 schema is deliberately small:
+The V0.4 schema remains deliberately small:
 
 ```json
 {
-  "schema_version": "0.3",
+  "schema_version": "0.4",
   "project": "garden_tool_shed",
   "default_view": "overview",
   "views": [
@@ -83,16 +91,16 @@ Generation rejects empty or duplicate view IDs, an undefined `default_view`, mis
 
 View IDs do not replace model-object IDs. A view called `architecture` may display `PART-012`, but `PART-012` remains the identity shared with every other representation.
 
-## V0.3 view types
+## V0.4 view types
 
 The asset-oriented contract covers at least these types:
 
-| Type | V0.3 behavior | Identity convention |
+| Type | V0.4 behavior | Identity convention |
 |---|---|---|
-| `mermaid` | Renders generated Mermaid when the CDN module is available and always exposes the source text. | Renderer receives the common selected object ID; highlighting is deferred. |
+| `mermaid` | Renders generated Mermaid from the local pinned browser asset and always exposes the source text. | Renderer receives the common selected object ID; highlighting is deferred. |
 | `graph` | Contract and selection-aware placeholder only; no graph library is included. | Graph nodes should use stable MBSE IDs. |
 | `svg` | Sanitizes and inserts embedded SVG as DOM content, maps clicks to shared selection, and highlights every element matching the selected ID. | Meaningful source elements use `data-mbse-id="PART-012"`. |
-| `gltf` | Renders an embedded GLB with Three.js, automatic framing, lighting, orbit/zoom/pan controls, raycast selection and generic highlight restoration. | glTF nodes use `extras.mbse_id`, for example `{"mbse_id": "PART-012"}`. |
+| `gltf` | Renders an embedded GLB with local Three.js, automatic framing, lighting, orbit/zoom/pan controls, click-only raycast selection and generic highlight restoration. | glTF nodes use `extras.mbse_id`, for example `{"mbse_id": "PART-012"}`. |
 
 The viewer also uses small built-in data renderers: `overview`, `objects`, `tables`, `relations` and `validation`. These preserve the useful viewer capabilities that predate the generic asset-view contract.
 
@@ -160,25 +168,52 @@ A glTF node representing an engineering object carries the existing stable ID in
 }
 ```
 
-`GLTFLoader` preserves node extras in `Object3D.userData`. Raycasting starts at the clicked mesh and searches upward for the nearest `userData.mbse_id`, then calls `context.setSelectedObject(id)`. The 3D renderer never owns a second authoritative selection value.
+`GLTFLoader` preserves node extras in `Object3D.userData`. The renderer records primary `pointerdown`, tracks movement, and raycasts only on `pointerup` when movement remained below 5 pixels. OrbitControls therefore receives the same pointer stream, but an orbit drag does not accidentally select an object. Raycasting starts at the clicked mesh and searches upward for the nearest `userData.mbse_id`, then calls `context.setSelectedObject(id)`. The 3D renderer never owns a second authoritative selection value.
 
-On `onSelectionChanged(id)`, every descendant mesh whose nearest mapped ancestor has that ID receives a cloned highlight material. Before another selection or unmount, the renderer disposes those clones and restores the exact original material references. Unmount also removes pointer and resize observers, cancels rendering, disposes controls, model resources and the WebGL renderer, and releases the context.
+On `onSelectionChanged(id)`, every descendant mesh whose nearest mapped ancestor has that ID receives a cloned highlight material. Before another selection or unmount, the renderer disposes those clones and restores the exact original material references.
 
-## Three.js loading and direct-file behavior
+Every renderer must treat `unmount()` as final for that instance. The glTF renderer marks itself disposed before cleanup, cancels its animation frame, disconnects its `ResizeObserver`, removes all pointer listeners, disposes OrbitControls, geometries, materials, textures, helper resources and the WebGL renderer, then explicitly releases the context. If `GLTFLoader.parse()` completes after unmount, the newly returned scenes are traversed and disposed without being attached. Cleanup is idempotent enough for normal errors and repeated `3D → SVG → 3D → Requirements → 3D` cycles.
 
-The generated page uses an import map pinned to Three.js r180 on jsDelivr. Core Three.js, `GLTFLoader` and `OrbitControls` come from that same version and CDN. The 3D renderer uses the base64-embedded GLB rather than fetching `views/model.glb`, so binary transport itself works under `file://`.
+## Offline browser dependencies and direct-file behavior
 
-Three.js still requires network access in V0.3. Its dynamic import is isolated behind a promise that resolves to `null` on failure. In that case the 3D host shows a dependency message; the viewer shell, object/detail views, SVG and locally embedded data remain usable. Bundling pinned Three.js modules for fully offline rendering is a desirable future extension.
+The viewer packages Three.js `0.180.0` and Mermaid `11.17.2`. `application/tools/viewer-assets/package-lock.json` pins those packages and esbuild `0.25.9`. The Three.js updater bundles core, `GLTFLoader` and `OrbitControls` into one classic script; Mermaid's published classic browser build is copied unchanged. Both live under `mbse_lite/_vendor/viewer` as Python package resources. `export_viewer` integrity-checks them against SHA-256 values in the packaged manifest and copies them into `assets/vendor/`.
+
+To update intentionally:
+
+```bash
+cd application/tools/viewer-assets
+npm ci
+npm run build
+```
+
+Node is an asset-maintenance tool only; normal Python installation, tests and viewer generation do not invoke it. Classic sibling scripts were chosen because browser handling of local ES-module imports is inconsistent under `file://`. The viewer contains no CDN reference for these core dependencies. If a script is missing or fails to initialize, only its Mermaid or 3D view reports the problem. Mermaid render errors and malformed GLB data are likewise caught within the affected renderer. Invalid or unsafe SVG is omitted during export and recorded as a localized per-view asset error instead of being written or aborting unrelated views.
+
+Three.js and Mermaid are MIT-licensed. Their license files are package resources and are copied into each generated bundle. An update must preserve upstream notices and review any changed license obligations, including code bundled transitively by Mermaid.
 
 ## Adding generated views
 
 Application or domain generators can call `export_viewer` with `ViewDefinition` entries and a `view_assets` mapping. A generator may supply text or binary assets through `Mapping[str, str | bytes]` without changing the generic viewer's project logic. Every asset path passes the same bundle-relative path validation before text or bytes are written. Unreferenced binary assets are written as sibling files but are not needlessly embedded in HTML.
 
-Default export also runs the small registry in `mbse_lite.visualization`. A domain generator inspects the parsed model and contributes views only when its required modeled roles are present. Project-specific code generates a representation from authoritative project data, attaches stable MBSE IDs, and describes it in the manifest. It does not encode project facts in `viewer.py`, nor promote the generated asset to an authoritative model.
+Default export also runs the small registry in `mbse_lite.visualization`. A domain generator contributes views only when the project explicitly opts into its visualization profile. Project-specific code generates a representation from authoritative project data, attaches stable MBSE IDs, and describes it in the manifest. It does not encode project facts in `viewer.py`, nor promote the generated asset to an authoritative model.
+
+## Visualization profile and role mapping
+
+A visualization profile is a reserved Markdown table with this shape:
+
+```markdown
+| Visualization Profile | Role | Object ID | Expected Type |
+|---|---|---|---|
+| garden_shed | enclosure | PART-001 | Part |
+| garden_shed | shelving | PART-012 | Part |
+```
+
+The table is project-specific visualization metadata. It maps a generator's semantic role to an existing stable MBSE ID; it does not repeat the object's name, description, requirements or geometry and is not an alternative engineering model. Profile and role names use lower-case letters, digits and underscores. A referenced ID must exist and match `Expected Type`; a registered generator may additionally require a fixed role set and type for each role. Duplicate roles, missing IDs, incompatible types and missing required roles fail viewer generation and CLI validation clearly.
+
+Projects without a recognized profile remain generic. In particular, `demo_project` does not activate the garden-shed generator merely because it happens to contain parts with similar names.
 
 ## Garden-shed shared conceptual visualization
 
-The garden-shed generator recognizes the modeled parts by their parsed `Part` names and uses their actual IDs. Name-based role detection remains isolated so it can later be replaced by an explicit visualization profile/role mapping. It represents the storage enclosure (`PART-001`), main storage zone (`PART-004`), enclosed mower compartment (`PART-005`), double-leaf main door (`PART-008`), mower external door (`PART-010`), mower ramp (`PART-011`) and right-end shelving (`PART-012`).
+The garden-shed generator resolves its seven required part roles from `projects/garden_tool_shed/visualization.md`. Renaming a mapped object does not affect activation or role resolution because identity comes only from the mapped ID. Current preferred candidate annotations are derived generically from `Concept` objects whose status is `Preferred candidate`, without exact name matching.
 
 Both SVG and GLB consume one small internal `GardenShedVisualizationSpec`; they do not maintain unrelated coordinate assumptions. The approximate footprint stated by the project requirement sets the envelope proportions. The current unresolved display defaults are: 2.2 m height, 0.06 m wall thickness, 0.08 m floor thickness, 1.85 m door height, 0.8 m ramp length, 22% of length for the mower zone and 11% for the shelving allocation. Door offsets, widths and other internal placements are normalized presentation choices.
 
@@ -188,4 +223,20 @@ The deterministic GLB writer has no added Python dependency. It writes glTF 2.0 
 
 ## Intentionally deferred
 
-V0.3 does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed CAD, construction geometry or parametric modeling. A future version can add an explicit visualization profile and then introduce a separate CAD-authoritative/parametric pipeline without changing the stable-ID or shared-selection contracts proved here.
+V0.4 does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed CAD, construction geometry or parametric modeling. The intended future boundary is:
+
+```text
+Markdown MBSE
+     ↓
+role/profile mapping
+     ↓
+geometry specification
+     ↓
+CadQuery or another domain generator
+     ↓
+SVG / GLB / STEP
+     ↓
+Web viewer
+```
+
+CadQuery is not implemented in V0.4. A V0.5 geometry generator can replace or augment the simple box-based GLB writer without changing the viewer, stable-ID or shared-selection contracts.

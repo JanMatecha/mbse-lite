@@ -23,3 +23,16 @@ jobs:
       - name: Validate demo model
         working-directory: application
         run: uv run mbse-lite validate ../projects/demo_project
+      - name: Validate garden-shed integration model and visualization profile
+        working-directory: application
+        run: uv run mbse-lite validate ../projects/garden_tool_shed
+      - name: Generate garden-shed viewer
+        working-directory: application
+        run: uv run mbse-lite view ../projects/garden_tool_shed --no-open
+      - name: Verify garden-shed viewer assets
+        run: |
+          test -s generated/garden_tool_shed/index.html
+          test -s generated/garden_tool_shed/views/floorplan.svg
+          test -s generated/garden_tool_shed/views/model.glb
+          test -s generated/garden_tool_shed/assets/vendor/three-viewer-0.180.0.min.js
+          test -s generated/garden_tool_shed/assets/vendor/mermaid-11.17.2.min.js

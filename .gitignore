@@ -7,3 +7,4 @@ __pycache__/
 dist/
 build/
 generated/
+application/tools/viewer-assets/node_modules/

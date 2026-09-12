@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "build_tool": "esbuild@0.25.9",
+  "dependencies": {
+    "three": {
+      "version": "0.180.0",
+      "source": "https://www.npmjs.com/package/three/v/0.180.0",
+      "asset": "three-viewer-0.180.0.min.js",
+      "sha256": "c48157c7908f390edff2922f1128bbf94e301a3d889940803d52c38133e5185b",
+      "license": "MIT",
+      "license_file": "three-LICENSE.txt"
+    },
+    "mermaid": {
+      "version": "11.17.2",
+      "source": "https://www.npmjs.com/package/mermaid/v/11.17.2",
+      "asset": "mermaid-11.17.2.min.js",
+      "sha256": "581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8",
+      "license": "MIT",
+      "license_file": "mermaid-LICENSE.txt"
+    }
+  }
+}

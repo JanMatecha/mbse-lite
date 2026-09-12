@@ -1,4 +1,5 @@
 import base64
+import copy
 import json
 import struct
 from pathlib import Path
@@ -7,6 +8,7 @@ from xml.etree import ElementTree
 import pytest
 
 from mbse_lite.core import Model, ModelObject, load_model
+from mbse_lite.browser_assets import MERMAID_VERSION, THREE_VERSION
 from mbse_lite.view_architecture import (
     MBSE_AREA,
     PROJECT_MANAGEMENT_AREA,
@@ -15,7 +17,12 @@ from mbse_lite.view_architecture import (
     build_viewer_manifest,
 )
 from mbse_lite.viewer import export_viewer
-from mbse_lite.visualization import build_generated_views
+from mbse_lite.visualization import (
+    build_generated_views,
+    load_visualization_profiles,
+    validate_visualizations,
+)
+from mbse_lite.visualization.garden_shed import GARDEN_SHED_REQUIRED_ROLES
 
 
 def demo_project() -> Path:
@@ -39,7 +46,7 @@ def glb_json(glb: bytes) -> dict[str, object]:
 def test_default_manifest_defines_grouped_navigation_and_asset_views():
     manifest = build_viewer_manifest("demo_project")
 
-    assert manifest["schema_version"] == "0.3"
+    assert manifest["schema_version"] == "0.4"
     assert manifest["project"] == "demo_project"
     assert manifest["default_view"] == "overview"
     assert [view["id"] for view in manifest["views"]] == [
@@ -81,6 +88,104 @@ def test_viewer_bundle_contains_manifest_model_and_meaningful_view_assets(tmp_pa
     assert "viewerManifest.views" in html
     assert "let selectedObjectId = null" in html
     assert "onSelectionChanged" in html
+
+
+def test_viewer_bundle_contains_pinned_offline_browser_dependencies(tmp_path):
+    output = tmp_path / "index.html"
+
+    export_viewer(load_model(demo_project()), output, project_name="Demo Project")
+
+    html = output.read_text(encoding="utf-8")
+    vendor = tmp_path / "assets" / "vendor"
+    dependency_manifest = json.loads(
+        (vendor / "manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert "cdn.jsdelivr.net" not in html
+    assert "import('three')" not in html
+    assert f'src="assets/vendor/three-viewer-{THREE_VERSION}.min.js"' in html
+    assert f'src="assets/vendor/mermaid-{MERMAID_VERSION}.min.js"' in html
+    assert (vendor / f"three-viewer-{THREE_VERSION}.min.js").stat().st_size > 500_000
+    assert (vendor / f"mermaid-{MERMAID_VERSION}.min.js").stat().st_size > 1_000_000
+    assert (vendor / "three-LICENSE.txt").exists()
+    assert (vendor / "mermaid-LICENSE.txt").exists()
+    assert dependency_manifest["dependencies"]["three"]["version"] == THREE_VERSION
+    assert dependency_manifest["dependencies"]["mermaid"]["version"] == MERMAID_VERSION
+    assert dependency_manifest["build_tool"] == "esbuild@0.25.9"
+
+
+def test_garden_shed_visualization_profile_resolves_required_roles_by_id():
+    model = load_model(garden_shed_project())
+
+    profile = load_visualization_profiles(model)["garden_shed"]
+
+    assert set(profile.roles) == set(GARDEN_SHED_REQUIRED_ROLES)
+    assert {mapping.object_id for mapping in profile.roles.values()} == {
+        "PART-001",
+        "PART-004",
+        "PART-005",
+        "PART-008",
+        "PART-010",
+        "PART-011",
+        "PART-012",
+    }
+    assert all(mapping.expected_type == "Part" for mapping in profile.roles.values())
+    assert validate_visualizations(model) == []
+
+
+def test_garden_shed_generation_does_not_depend_on_mapped_object_names():
+    model = load_model(garden_shed_project())
+    profile = load_visualization_profiles(model)["garden_shed"]
+    for index, mapping in enumerate(profile.roles.values(), start=1):
+        model.objects[mapping.object_id].attributes["Name"] = f"Renamed part {index}"
+
+    generated = build_generated_views(model)
+
+    assert {view.id for view in generated.views} >= {"floor-plan", "conceptual-3d"}
+    assert generated.assets["views/model.glb"].startswith(b"glTF")
+
+
+def test_missing_garden_shed_profile_role_fails_clearly():
+    model = copy.deepcopy(load_model(garden_shed_project()))
+    for table_key, rows in model.tables.items():
+        if rows and "Visualization Profile" in rows[0]:
+            model.tables[table_key] = [row for row in rows if row["Role"] != "shelving"]
+            break
+
+    with pytest.raises(ValueError, match="missing required roles: shelving"):
+        build_generated_views(model)
+    assert validate_visualizations(model) == [
+        ("ERROR", "Visualization profile 'garden_shed' is missing required roles: shelving")
+    ]
+
+
+def test_missing_profile_object_id_and_wrong_type_fail_clearly():
+    missing_model = copy.deepcopy(load_model(garden_shed_project()))
+    wrong_type_model = copy.deepcopy(load_model(garden_shed_project()))
+    for model, object_id, expected_type in (
+        (missing_model, "PART-999", "Part"),
+        (wrong_type_model, "PART-001", "Requirement"),
+    ):
+        for rows in model.tables.values():
+            if rows and "Visualization Profile" in rows[0]:
+                rows[0]["Object ID"] = object_id
+                rows[0]["Expected Type"] = expected_type
+                break
+
+    with pytest.raises(ValueError, match="missing object ID 'PART-999'"):
+        build_generated_views(missing_model)
+    with pytest.raises(ValueError, match="of type 'Part'; expected 'Requirement'"):
+        build_generated_views(wrong_type_model)
+    assert validate_visualizations(missing_model)[0][0] == "ERROR"
+    assert validate_visualizations(wrong_type_model)[0][0] == "ERROR"
+
+
+def test_demo_project_does_not_activate_garden_shed_visualization():
+    model = load_model(demo_project())
+
+    assert load_visualization_profiles(model) == {}
+    assert build_generated_views(model).views == ()
+    assert build_generated_views(model).assets == {}
 
 
 def test_garden_shed_bundle_contains_interactive_floor_plan_with_model_ids(tmp_path):
@@ -197,18 +302,54 @@ def test_gltf_renderer_uses_three_raycasting_shared_selection_and_cleanup(tmp_pa
 
     html = output.read_text(encoding="utf-8")
 
-    assert "three@0.180.0" in html
+    assert f"three-viewer-{THREE_VERSION}.min.js" in html
     assert "new GLTFLoader()" in html
     assert ".parse(arrayBuffer" in html
     assert "new THREE.Raycaster()" in html
     assert "context.setSelectedObject(mbseId)" in html
     assert "function restoreHighlights()" in html
     assert "onSelectionChanged(id)" in html
-    assert "removeEventListener('pointerdown'" in html
+    assert "disposeObjectResources(parsedScenes)" in html
+    assert "removeEventListener('pointerdown', pointerDownHandler)" in html
+    assert "removeEventListener('pointermove', pointerMoveHandler)" in html
+    assert "removeEventListener('pointerup', pointerUpHandler)" in html
+    assert "removeEventListener('pointercancel', pointerCancelHandler)" in html
     assert "cancelAnimationFrame(animationFrame)" in html
+    assert "resizeObserver?.disconnect()" in html
     assert "controls?.dispose()" in html
     assert "renderer?.dispose()" in html
-    assert "Three.js could not be loaded" in html
+    assert "renderer?.forceContextLoss?.()" in html
+    assert "The local Three.js dependency is unavailable" in html
+
+
+def test_gltf_renderer_selects_on_short_pointerup_but_not_orbit_drag(tmp_path):
+    output = tmp_path / "index.html"
+    export_viewer(load_model(garden_shed_project()), output, project_name="garden_tool_shed")
+
+    html = output.read_text(encoding="utf-8")
+
+    assert "const clickMovementThreshold = 5" in html
+    assert "pointerDownHandler = event =>" in html
+    assert "pointerMoveHandler = event =>" in html
+    assert "pointerUpHandler = event =>" in html
+    assert "Math.hypot(" in html
+    assert "const isClick = !pointerStart.moved && movement < clickMovementThreshold" in html
+    assert "if (isClick) selectAtPointer(event)" in html
+    assert "addEventListener('pointerdown', pointerDownHandler)" in html
+    assert "addEventListener('pointerup', pointerUpHandler)" in html
+
+
+def test_dependency_and_malformed_asset_failures_are_local_to_their_views(tmp_path):
+    output = tmp_path / "index.html"
+    export_viewer(load_model(garden_shed_project()), output, project_name="garden_tool_shed")
+
+    html = output.read_text(encoding="utf-8")
+
+    assert "The local Mermaid dependency is unavailable" in html
+    assert "The Mermaid diagram could not be rendered" in html
+    assert "SVG source is invalid or unsafe" in html
+    assert "The conceptual 3D model could not be rendered" in html
+    assert "rendererFactories[view.type] || unsupportedRenderer" in html
 
 
 def test_svg_is_sanitized_before_file_and_html_emission(tmp_path):
@@ -246,6 +387,32 @@ def test_svg_is_sanitized_before_file_and_html_emission(tmp_path):
     assert "alert(1)" not in html
     assert "onclick=\"alert(2)\"" not in html
     assert "javascript:alert(3)" not in html
+
+
+def test_malformed_svg_is_quarantined_to_its_view(tmp_path):
+    view = ViewDefinition(
+        id="broken-svg",
+        title="Broken SVG",
+        group="Test",
+        type="svg",
+        source="views/broken.svg",
+    )
+    output = tmp_path / "index.html"
+
+    export_viewer(
+        Model(),
+        output,
+        project_name="Malformed asset",
+        views=[view],
+        view_assets={"views/broken.svg": "<svg><not-closed>"},
+    )
+
+    html = output.read_text(encoding="utf-8")
+    assert not (tmp_path / "views" / "broken.svg").exists()
+    assert "SVG asset is invalid or unsafe" in html
+    assert "const viewAssetErrors" in html
+    assert "assetErrors: viewAssetErrors" in html
+    assert "rendererFactories[view.type] || unsupportedRenderer" in html
 
 
 def test_unknown_view_type_is_preserved_for_graceful_browser_fallback(tmp_path):

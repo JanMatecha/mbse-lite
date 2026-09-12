@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Mapping, Sequence
 from xml.etree import ElementTree
 
+from .browser_assets import (
+    MERMAID_ASSET_PATH,
+    THREE_ASSET_PATH,
+    browser_dependency_assets,
+)
 from .core import Model
 from .view_architecture import (
     ViewDefinition,
@@ -142,17 +147,32 @@ def export_viewer(
         definitions = list(views)
     if view_assets:
         assets.update(view_assets)
+    dependency_assets = browser_dependency_assets()
+    dependency_collisions = sorted(set(assets).intersection(dependency_assets))
+    if dependency_collisions:
+        raise ValueError(
+            "View assets collide with packaged browser dependencies: "
+            + ", ".join(dependency_collisions)
+        )
+    assets.update(dependency_assets)
 
     viewer_model = build_viewer_model(model)
     manifest = build_viewer_manifest(project_name, definitions)
+    asset_errors: dict[str, str] = {}
     svg_sources = {
         view.source for view in definitions if view.type == "svg" and view.source is not None
     }
-    for source in svg_sources.intersection(assets):
+    for source in svg_sources.intersection(set(assets)):
         content = assets[source]
         if not isinstance(content, str):
-            raise ValueError(f"SVG view asset must be UTF-8 text: {source}")
-        assets[source] = _sanitize_svg(content)
+            asset_errors[source] = f"SVG view asset must be UTF-8 text: {source}"
+            del assets[source]
+            continue
+        try:
+            assets[source] = _sanitize_svg(content)
+        except ValueError as error:
+            asset_errors[source] = f"SVG asset is invalid or unsafe: {error}"
+            del assets[source]
 
     _write_json(output_path.parent / "model.json", viewer_model)
     _write_json(output_path.parent / "viewer.json", manifest)
@@ -285,42 +305,24 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   .detail dl { grid-template-columns: 1fr; }
 }
 </style>
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
-  }
-}
-</script>
-<script type="module">
-window.mbseThreeReady = (async () => {
-  try {
-    const [THREE, loaderModule, controlsModule] = await Promise.all([
-      import('three'),
-      import('three/addons/loaders/GLTFLoader.js'),
-      import('three/addons/controls/OrbitControls.js')
-    ]);
-    return {
-      THREE,
-      GLTFLoader: loaderModule.GLTFLoader,
-      OrbitControls: controlsModule.OrbitControls
-    };
-  } catch (error) {
-    console.info('Three.js could not be loaded. Other viewer views remain available.', error);
+<script src="__THREE_ASSET_PATH__"></script>
+<script src="__MERMAID_ASSET_PATH__"></script>
+<script>
+window.mbseThreeReady = Promise.resolve(window.mbseThreeModules || null);
+window.mbseMermaidReady = Promise.resolve().then(() => {
+  const mermaid = window.mermaid;
+  if (!mermaid?.initialize) {
+    console.info('The local Mermaid dependency is unavailable. Source remains available.');
     return null;
   }
-})();
-window.mbseMermaidReady = (async () => {
   try {
-    const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
     return mermaid;
   } catch (error) {
-    console.info('Mermaid could not be loaded. Source remains available.', error);
+    console.info('Mermaid could not be initialized. Source remains available.', error);
     return null;
   }
-})();
+});
 </script>
 </head>
 <body>
@@ -339,11 +341,12 @@ window.mbseMermaidReady = (async () => {
     <div id="objectDetail" class="detail muted">Select an object to inspect its attributes and direct relations.</div>
   </aside>
 </div>
-<script type="module">
+<script>
 const viewerManifest = __MANIFEST_JSON__;
 const viewerModel = __MODEL_JSON__;
 const embeddedViewAssets = __ASSETS_JSON__;
 const embeddedBinaryViewAssets = __BINARY_ASSETS_JSON__;
+const viewAssetErrors = __ASSET_ERRORS_JSON__;
 
 const objects = viewerModel.objects;
 const relations = viewerModel.relations;
@@ -561,19 +564,42 @@ function validationRenderer(view, context) {
 }
 
 function mermaidRenderer(view, context) {
+  let disposed = false;
   return {
     mount(container) {
+      disposed = false;
       const source = context.assets[view.source];
       if (typeof source !== 'string') {
         container.innerHTML = `${viewHeader(view)}<div class="scaffold muted">Mermaid source is unavailable: ${escapeHtml(view.source || '(no source)')}</div>`;
         return;
       }
-      container.innerHTML = `${viewHeader(view)}<div class="graph"><pre class="mermaid">${escapeHtml(source)}</pre></div><details><summary>Mermaid source</summary><pre>${escapeHtml(source)}</pre></details>`;
+      container.innerHTML = `${viewHeader(view)}<div class="graph"><p class="muted" data-mermaid-status>Rendering diagram…</p><pre class="mermaid">${escapeHtml(source)}</pre></div><details><summary>Mermaid source</summary><pre>${escapeHtml(source)}</pre></details>`;
       const graph = container.querySelector('.mermaid');
-      window.mbseMermaidReady?.then(mermaid => mermaid?.run({ nodes: [graph] }));
+      const status = container.querySelector('[data-mermaid-status]');
+      window.mbseMermaidReady?.then(async mermaid => {
+        if (disposed) return;
+        if (!mermaid) {
+          graph.classList.remove('mermaid');
+          status.textContent = 'The local Mermaid dependency is unavailable. Source remains available below.';
+          return;
+        }
+        try {
+          await mermaid.run({ nodes: [graph] });
+          if (!disposed) status.remove();
+        } catch (error) {
+          console.error('The Mermaid view could not be rendered.', error);
+          if (!disposed) {
+            graph.classList.remove('mermaid');
+            status.textContent = 'The Mermaid diagram could not be rendered. Source remains available below.';
+          }
+        }
+      });
     },
     onSelectionChanged(id) {
       this.selectedObjectId = id;
+    },
+    unmount() {
+      disposed = true;
     }
   };
 }
@@ -635,6 +661,11 @@ function svgRenderer(view, context) {
         host.innerHTML = '<p class="muted">SVG source is missing or unsafe.</p>';
         return;
       }
+      const assetError = context.assetErrors[source];
+      if (typeof assetError === 'string') {
+        host.innerHTML = `<p class="muted">${escapeHtml(assetError)}</p>`;
+        return;
+      }
       const svgSource = context.assets[source];
       if (typeof svgSource !== 'string') {
         host.innerHTML = '<p class="muted">Embedded SVG source is unavailable.</p>';
@@ -676,14 +707,20 @@ function gltfRenderer(view, context) {
   let camera;
   let controls;
   let modelRoot;
+  let loadedScenes = [];
   let grid;
   let raycaster;
-  let pointerHandler;
+  let pointerDownHandler;
+  let pointerMoveHandler;
+  let pointerUpHandler;
+  let pointerCancelHandler;
+  let pointerStart = null;
   let resizeObserver;
   let animationFrame = 0;
   let selectedId = null;
   let disposed = false;
   let THREE;
+  const clickMovementThreshold = 5;
   const highlightedMaterials = new Map();
 
   function setStatus(message) {
@@ -754,28 +791,117 @@ function gltfRenderer(view, context) {
     renderer.render(scene, camera);
   }
 
-  function disposeSceneResources() {
-    restoreHighlights();
+  function disposeObjectResources(roots) {
     const geometries = new Set();
     const materials = new Set();
-    modelRoot?.traverse(object => {
-      if (object.geometry) geometries.add(object.geometry);
-      const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
-      objectMaterials.filter(Boolean).forEach(material => materials.add(material));
-    });
+    const textures = new Set();
+    roots.forEach(root => root?.traverse(object => {
+      if (object.geometry?.dispose) geometries.add(object.geometry);
+      if (object.skeleton?.boneTexture?.dispose) textures.add(object.skeleton.boneTexture);
+      const objectMaterials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      objectMaterials.filter(Boolean).forEach(material => {
+        materials.add(material);
+        Object.values(material).forEach(value => {
+          if (value?.isTexture) textures.add(value);
+          if (Array.isArray(value)) {
+            value.filter(item => item?.isTexture).forEach(texture => textures.add(texture));
+          }
+        });
+      });
+    }));
+    textures.forEach(texture => texture.dispose());
     geometries.forEach(geometry => geometry.dispose());
     materials.forEach(material => material.dispose());
-    grid?.geometry?.dispose();
-    grid?.material?.dispose();
+  }
+
+  function disposeSceneResources() {
+    restoreHighlights();
+    disposeObjectResources(loadedScenes);
+    loadedScenes = [];
+    if (grid) {
+      grid.geometry?.dispose();
+      grid.material?.dispose();
+    }
+  }
+
+  function removePointerListeners() {
+    const canvas = renderer?.domElement;
+    if (!canvas) return;
+    if (pointerDownHandler) canvas.removeEventListener('pointerdown', pointerDownHandler);
+    if (pointerMoveHandler) canvas.removeEventListener('pointermove', pointerMoveHandler);
+    if (pointerUpHandler) canvas.removeEventListener('pointerup', pointerUpHandler);
+    if (pointerCancelHandler) canvas.removeEventListener('pointercancel', pointerCancelHandler);
+  }
+
+  function selectAtPointer(event) {
+    if (!modelRoot || !renderer || !raycaster || !camera) return;
+    const bounds = renderer.domElement.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    const pointer = new THREE.Vector2(
+      ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+      -((event.clientY - bounds.top) / bounds.height) * 2 + 1
+    );
+    raycaster.setFromCamera(pointer, camera);
+    for (const intersection of raycaster.intersectObject(modelRoot, true)) {
+      const mbseId = resolveMbseId(intersection.object);
+      if (mbseId) {
+        context.setSelectedObject(mbseId);
+        return;
+      }
+    }
+  }
+
+  function installPointerListeners() {
+    const canvas = renderer.domElement;
+    pointerDownHandler = event => {
+      if (event.button !== 0 || event.isPrimary === false) return;
+      pointerStart = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        moved: false
+      };
+    };
+    pointerMoveHandler = event => {
+      if (!pointerStart || event.pointerId !== pointerStart.pointerId) return;
+      if (Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) >= clickMovementThreshold) {
+        pointerStart.moved = true;
+      }
+    };
+    pointerUpHandler = event => {
+      if (!pointerStart || event.pointerId !== pointerStart.pointerId) return;
+      const movement = Math.hypot(
+        event.clientX - pointerStart.x,
+        event.clientY - pointerStart.y
+      );
+      const isClick = !pointerStart.moved && movement < clickMovementThreshold;
+      pointerStart = null;
+      if (isClick) selectAtPointer(event);
+    };
+    pointerCancelHandler = event => {
+      if (pointerStart?.pointerId === event.pointerId) pointerStart = null;
+    };
+    canvas.addEventListener('pointerdown', pointerDownHandler);
+    canvas.addEventListener('pointermove', pointerMoveHandler);
+    canvas.addEventListener('pointerup', pointerUpHandler);
+    canvas.addEventListener('pointercancel', pointerCancelHandler);
+  }
+
+  function clearPointerState() {
+    pointerStart = null;
+    pointerDownHandler = null;
+    pointerMoveHandler = null;
+    pointerUpHandler = null;
+    pointerCancelHandler = null;
   }
 
   function cleanupRenderer() {
     if (animationFrame) cancelAnimationFrame(animationFrame);
     animationFrame = 0;
     resizeObserver?.disconnect();
-    if (renderer?.domElement && pointerHandler) {
-      renderer.domElement.removeEventListener('pointerdown', pointerHandler);
-    }
+    removePointerListeners();
     controls?.dispose();
     disposeSceneResources();
     renderer?.dispose();
@@ -787,7 +913,7 @@ function gltfRenderer(view, context) {
     modelRoot = null;
     grid = null;
     raycaster = null;
-    pointerHandler = null;
+    clearPointerState();
     resizeObserver = null;
   }
 
@@ -810,7 +936,12 @@ function gltfRenderer(view, context) {
     const loader = new GLTFLoader();
     const gltf = await new Promise((resolve, reject) =>
       loader.parse(arrayBuffer, '', resolve, reject));
-    if (disposed) return;
+    const parsedScenes = gltf.scenes?.length ? gltf.scenes : [gltf.scene];
+    if (disposed) {
+      disposeObjectResources(parsedScenes);
+      return;
+    }
+    loadedScenes = parsedScenes;
     modelRoot = gltf.scene;
     modelRoot.traverse(object => {
       if (object.userData?.mbse_id) object.userData.mbse_id = String(object.userData.mbse_id);
@@ -843,23 +974,7 @@ function gltfRenderer(view, context) {
     scene.add(grid);
 
     raycaster = new THREE.Raycaster();
-    pointerHandler = event => {
-      if (event.button !== 0 || !modelRoot) return;
-      const bounds = renderer.domElement.getBoundingClientRect();
-      const pointer = new THREE.Vector2(
-        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
-        -((event.clientY - bounds.top) / bounds.height) * 2 + 1
-      );
-      raycaster.setFromCamera(pointer, camera);
-      for (const intersection of raycaster.intersectObject(modelRoot, true)) {
-        const mbseId = resolveMbseId(intersection.object);
-        if (mbseId) {
-          context.setSelectedObject(mbseId);
-          return;
-        }
-      }
-    };
-    renderer.domElement.addEventListener('pointerdown', pointerHandler);
+    installPointerListeners();
     resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(host);
     resize();
@@ -887,7 +1002,7 @@ function gltfRenderer(view, context) {
       Promise.resolve(window.mbseThreeReady).then(async modules => {
         if (disposed) return;
         if (!modules) {
-          setStatus('Three.js could not be loaded. Check network access; other viewer views remain available.');
+          setStatus('The local Three.js dependency is unavailable. Regenerate the viewer bundle; other views remain available.');
           return;
         }
         try {
@@ -950,6 +1065,7 @@ const viewerContext = {
   manifest: viewerManifest,
   assets: embeddedViewAssets,
   binaryAssets: embeddedBinaryViewAssets,
+  assetErrors: viewAssetErrors,
   setSelectedObject,
   getSelectedObjectId: () => selectedObjectId
 };
@@ -1032,6 +1148,9 @@ else document.getElementById('viewContent').innerHTML = '<div class="card muted"
         "__MODEL_JSON__": _json_for_html(viewer_model),
         "__ASSETS_JSON__": _json_for_html(embedded_assets),
         "__BINARY_ASSETS_JSON__": _json_for_html(embedded_binary_assets),
+        "__ASSET_ERRORS_JSON__": _json_for_html(asset_errors),
+        "__THREE_ASSET_PATH__": THREE_ASSET_PATH,
+        "__MERMAID_ASSET_PATH__": MERMAID_ASSET_PATH,
     }
     for token, value in replacements.items():
         html = html.replace(token, value)

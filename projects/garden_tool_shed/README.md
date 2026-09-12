@@ -21,7 +21,8 @@ This project deliberately separates system engineering from delivery planning:
 ```text
 garden_tool_shed/
 ├── mbse/                 # what/why/how the shed shall work
-└── project_management/   # work needed to develop and deliver it
+├── project_management/   # work needed to develop and deliver it
+└── visualization.md      # non-engineering role mapping for generated views
 ```
 
 ### `mbse/`
@@ -56,5 +57,9 @@ Project management:
 - `project_management/01_tasks.md`
 - `project_management/02_milestones.md`
 - `project_management/03_relations.md`
+
+Visualization metadata:
+
+- `visualization.md` — maps semantic visualization roles to existing stable MBSE IDs; it does not redefine engineering objects or make generated geometry authoritative.
 
 The structure may be extended when the project needs additional dedicated files such as site data, calculations, drawings, BOM or construction planning.

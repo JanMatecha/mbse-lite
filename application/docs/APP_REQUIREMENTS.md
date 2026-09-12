@@ -29,6 +29,10 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-023 | Interactive 3D objects shall use existing stable model IDs through `node.extras.mbse_id` and shall synchronize picking and highlighting through the viewer-owned selected object ID. | Implemented |
 | APP-REQ-024 | Generated GLB data required for direct `file://` viewing shall be safely encoded in the HTML bundle and parsed without fetching the sibling GLB file. | Implemented |
 | APP-REQ-025 | Failure to load the optional browser-side 3D dependency shall remain local to the 3D view and shall not prevent access to other viewer views. | Implemented |
+| APP-REQ-026 | Generated viewer bundles shall include pinned local Mermaid and Three.js browser dependencies so core views work without a network connection when opened directly from disk. | Implemented |
+| APP-REQ-027 | A project may define visualization-specific Markdown role mappings from semantic roles to existing stable model IDs, and invalid IDs or incompatible object types shall fail validation clearly. | Implemented |
+| APP-REQ-028 | An unmounted 3D renderer shall release animation, observer, event, controls, scene and WebGL resources, including glTF scenes that finish loading after unmount. | Implemented |
+| APP-REQ-029 | Three-dimensional selection shall occur for a short pointer click and shall not be triggered by a meaningful orbit-drag movement. | Implemented |
 
 ## Rule for adding requirements
 

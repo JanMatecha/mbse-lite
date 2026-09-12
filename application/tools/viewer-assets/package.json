@@ -1,0 +1,14 @@
+{
+  "name": "mbse-lite-viewer-assets",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9",
+    "mermaid": "11.17.2",
+    "three": "0.180.0"
+  }
+}

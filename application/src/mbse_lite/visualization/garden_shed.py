@@ -11,21 +11,19 @@ from typing import Mapping
 from ..core import Model, ModelObject
 from ..view_architecture import ViewDefinition
 from ._types import GeneratedViews
+from .profile import resolve_visualization_profile
 
 
-_PART_ROLES = {
-    "enclosure": "Storage enclosure",
-    "main_storage": "Main storage zone",
-    "mower_compartment": "Enclosed mower compartment",
-    "main_door": "Double-leaf main door",
-    "mower_door": "Mower external door",
-    "mower_ramp": "Mower access ramp",
-    "shelving": "Right-end shelving unit",
+GARDEN_SHED_PROFILE = "garden_shed"
+GARDEN_SHED_REQUIRED_ROLES = {
+    "enclosure": "Part",
+    "main_storage": "Part",
+    "mower_compartment": "Part",
+    "main_door": "Part",
+    "mower_door": "Part",
+    "mower_ramp": "Part",
+    "shelving": "Part",
 }
-_PREFERRED_CANDIDATE_NAMES = (
-    "Mower door at end of long side",
-    "Right-shifted main entrance after shelving",
-)
 
 _FOOTPRINT_PATTERN = re.compile(
     r"approximately\s+(\d+(?:\.\d+)?)\s*m\s*(?:×|x|by)\s*(\d+(?:\.\d+)?)\s*m",
@@ -66,35 +64,16 @@ class _Box:
     rotation: tuple[float, float, float, float] | None = None
 
 
-def _part_roles(model: Model) -> dict[str, ModelObject] | None:
-    # TODO: Replace name detection with an explicit visualization profile / role
-    # mapping when the project-model contract gains that capability.
-    parts_by_name = {
-        obj.attributes.get("Name", "").strip().casefold(): obj
-        for obj in model.objects.values()
-        if obj.type == "Part"
-    }
-    roles: dict[str, ModelObject] = {}
-    for role, name in _PART_ROLES.items():
-        obj = parts_by_name.get(name.casefold())
-        if obj is None:
-            return None
-        roles[role] = obj
-    return roles
-
-
 def _preferred_candidate_ids(model: Model) -> tuple[str, ...]:
-    concepts_by_name = {
-        obj.attributes.get("Name", "").strip().casefold(): obj
-        for obj in model.objects.values()
-        if obj.type == "Concept"
-    }
-    preferred_ids = []
-    for name in _PREFERRED_CANDIDATE_NAMES:
-        concept = concepts_by_name.get(name.casefold())
-        if concept and concept.attributes.get("Status", "").strip().casefold() == "preferred candidate":
-            preferred_ids.append(concept.id)
-    return tuple(preferred_ids)
+    return tuple(
+        sorted(
+            obj.id
+            for obj in model.objects.values()
+            if obj.type == "Concept"
+            and obj.attributes.get("Status", "").strip().casefold()
+            == "preferred candidate"
+        )
+    )
 
 
 def _approximate_footprint(model: Model) -> tuple[float, float, str, str, str] | None:
@@ -574,7 +553,9 @@ def _conceptual_glb(spec: GardenShedVisualizationSpec) -> bytes:
 def generate_garden_shed_views(model: Model) -> GeneratedViews | None:
     """Generate garden-shed conceptual views when all modeled roles exist."""
 
-    roles = _part_roles(model)
+    roles = resolve_visualization_profile(
+        model, GARDEN_SHED_PROFILE, GARDEN_SHED_REQUIRED_ROLES
+    )
     if roles is None:
         return None
     spec = _visualization_spec(model, roles)

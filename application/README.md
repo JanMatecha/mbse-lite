@@ -63,6 +63,12 @@ generated/<project-name>/
 ├── index.html
 ├── model.json
 ├── viewer.json
+├── assets/
+│   └── vendor/
+│       ├── three-viewer-0.180.0.min.js
+│       ├── mermaid-11.17.2.min.js
+│       ├── manifest.json
+│       └── *-LICENSE.txt
 └── views/
     ├── traceability.mmd
     ├── delivery-traceability.mmd
@@ -84,11 +90,27 @@ uv run mbse-lite view ../projects/garden_tool_shed --output ../generated/garden_
 
 The viewer is read-only. Markdown remains the source of truth; every file in the viewer bundle is derived and disposable. No continuously running Python server or database is required. Navigation comes from `viewer.json`, while `model.json` carries the renderer-neutral objects, relations, supporting tables and validation results. Text view assets, including sanitized SVG, are embedded in the HTML. GLB assets used by `gltf` views are embedded separately as base64 and reconstructed as an `ArrayBuffer`, so direct `file://` use does not fetch the sibling binary file.
 
-SVG elements use `data-mbse-id`; glTF nodes use `extras.mbse_id`. Clicking either interactive representation selects the same object used by the list and detail panel, while selecting elsewhere highlights the matching representation when that view is active. Three.js r180, `GLTFLoader` and `OrbitControls` load from a pinned jsDelivr ES-module mapping. If those modules are unavailable, the 3D view shows a useful message and all data, SVG and system views remain usable. Fully offline Three.js bundling is a future improvement.
+SVG elements use `data-mbse-id`; glTF nodes use `extras.mbse_id`. Clicking either interactive representation selects the same object used by the list and detail panel, while selecting elsewhere highlights the matching representation when that view is active. A 5-pixel movement threshold distinguishes selection clicks from orbit drags.
+
+Core browser dependencies are local and pinned: Three.js `0.180.0` (including bundled `GLTFLoader` and `OrbitControls`) and Mermaid `11.17.2`. Generation copies classic-script builds from Python package resources to `assets/vendor/`; classic scripts avoid local ES-module imports that some browsers reject under `file://`. If a local dependency is missing or a view asset is malformed, that view shows a localized message while unrelated views remain usable.
+
+The garden-shed project opts into its generator through `projects/garden_tool_shed/visualization.md`. Its reserved Markdown table maps `Visualization Profile` + `Role` to an existing `Object ID` and `Expected Type`. The mapping supplies visualization semantics only; it neither duplicates nor changes the engineering definition. Missing objects, wrong types and missing generator-required roles fail validation clearly. A project without the `garden_shed` profile does not activate those views.
 
 The garden-shed floor plan and 3D model are conceptual. Its approximate project footprint sets the envelope proportions. The shared visualization-only layout spec uses a 2.2 m display height, 0.06 m wall thickness, 0.08 m floor thickness, 1.85 m display door height, 0.8 m ramp length, a 22% mower-zone split and an 11% shelving-length allocation where project geometry is unresolved. These values are presentation defaults, are not construction-ready, and are never written into project Markdown.
 
-See `docs/VIEW_ARCHITECTURE.md` for the V0.3 manifest schema, SVG/glTF identity rules, binary transport, renderer lifecycle and object-selection contracts.
+## Updating offline viewer assets
+
+The checked-in assets and integrity manifest are rebuilt only when intentionally upgrading a dependency:
+
+```bash
+cd tools/viewer-assets
+npm ci
+npm run build
+```
+
+`package-lock.json` pins the complete update toolchain, including esbuild `0.25.9`. Normal Python installation, testing and viewer generation do not require Node. Three.js and Mermaid are MIT-licensed; their license files are packaged and copied beside the browser assets. Dependency upgrades must retain upstream notices and recheck licenses, including Mermaid's bundled transitive code.
+
+See `docs/VIEW_ARCHITECTURE.md` for the V0.4 manifest schema, offline packaging, visualization-profile, SVG/glTF identity, binary transport, renderer lifecycle and object-selection contracts.
 
 ## Documentation
 

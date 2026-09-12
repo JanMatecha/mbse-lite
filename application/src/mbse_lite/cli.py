@@ -13,6 +13,7 @@ from .core import (
     validate_model,
 )
 from .viewer import export_viewer
+from .visualization import validate_visualizations
 
 
 def _add_project_argument(parser: argparse.ArgumentParser) -> None:
@@ -75,7 +76,7 @@ def main() -> int:
     model = load_model(args.project)
 
     if args.command == "validate":
-        findings = validate_model(model)
+        findings = [*validate_model(model), *validate_visualizations(model)]
         print(f"Objects: {len(model.objects)}")
         print(f"Relations: {len(model.relations)}")
         if not findings:

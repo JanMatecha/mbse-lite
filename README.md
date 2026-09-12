@@ -47,6 +47,8 @@ Create a new project by copying `projects/_template/` and then tailoring its fil
 
 For each technical project, Markdown files inside that project directory are the source of truth. Mermaid, HTML, SVG, GLB and XLSX are generated views or exchange formats.
 
+The generated interactive viewer is self-contained for normal direct-file use: it copies pinned Mermaid and Three.js browser assets into its `assets/` directory and does not require a CDN or a continuously running server. Projects may opt into domain visualizations through Markdown visualization profiles that map semantic roles to existing stable MBSE IDs without redefining the engineering objects.
+
 ## Privacy
 
 Do not copy technical facts, examples, assumptions, customer information or private data between projects unless explicitly requested. Check repository visibility before adding sensitive project data.
