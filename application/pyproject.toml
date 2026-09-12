@@ -12,6 +12,9 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+cad = [
+    "cadquery==2.8.0",
+]
 
 [project.scripts]
 mbse-lite = "mbse_lite.cli:main"

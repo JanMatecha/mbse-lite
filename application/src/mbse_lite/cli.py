@@ -50,6 +50,13 @@ def build_parser() -> argparse.ArgumentParser:
     view.add_argument("--output", type=Path, default=None, help="Optional output HTML path")
     view.add_argument("--no-open", action="store_true", help="Generate the viewer without opening a browser")
 
+    cad = sub.add_parser(
+        "export-cad",
+        help="Generate optional CadQuery footprint and conceptual-preview artifacts",
+    )
+    _add_project_argument(cad)
+    cad.add_argument("output_dir", type=Path)
+
     xlsx = sub.add_parser("export-xlsx", help="Generate a LibreOffice-compatible XLSX workbook")
     _add_project_argument(xlsx)
     xlsx.add_argument("output", type=Path)
@@ -119,6 +126,21 @@ def main() -> int:
             print("Updated: validation passed")
         else:
             print("No change: validation passed")
+        return 0
+
+    if args.command == "export-cad":
+        from .cad import CadError, export_project_cad
+
+        try:
+            result = export_project_cad(load_model(args.project), args.output_dir)
+        except (CadError, ValueError) as error:
+            print(f"ERROR: {error}")
+            return 1
+        print("CAD export completed successfully.")
+        for path in result.artifacts:
+            print(f"Written: {path}")
+        if result.warning:
+            print(result.warning)
         return 0
 
     model = load_model(args.project)

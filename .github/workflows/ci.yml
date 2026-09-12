@@ -36,3 +36,29 @@ jobs:
           test -s generated/garden_tool_shed/views/model.glb
           test -s generated/garden_tool_shed/assets/vendor/three-viewer-0.180.0.min.js
           test -s generated/garden_tool_shed/assets/vendor/mermaid-11.17.2.min.js
+
+  cad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: python -m pip install uv
+      - name: Install application with optional CAD support
+        working-directory: application
+        run: uv sync --extra dev --extra cad
+      - name: Run optional CAD boundary and integration tests
+        working-directory: application
+        run: uv run pytest -q tests/test_cad_boundary.py tests/test_cad_runner.py tests/test_cad_worker.py tests/test_cad_worker_integration.py tests/test_cadquery_backend.py
+      - name: Export garden-shed CAD artifacts
+        working-directory: application
+        run: uv run mbse-lite export-cad ../projects/garden_tool_shed ../generated/garden_tool_shed/cad
+      - name: Verify garden-shed CAD artifacts
+        run: |
+          test -s generated/garden_tool_shed/cad/footprint.step
+          test -s generated/garden_tool_shed/cad/conceptual-preview.step
+          test -s generated/garden_tool_shed/cad/conceptual-preview.glb
+          test -s generated/garden_tool_shed/cad/cad-manifest.json
+          test -s generated/garden_tool_shed/cad/cad-job-result.json

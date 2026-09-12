@@ -20,7 +20,8 @@ Current POC capabilities:
 - export LibreOffice-compatible XLSX,
 - import XLSX into a reviewable Markdown directory,
 - safely update one existing Markdown object attribute with optimistic concurrency and validation,
-- parse explicitly sourced structured geometry quantities with deterministic decimal values.
+- parse explicitly sourced structured geometry quantities with deterministic decimal values,
+- optionally export a footprint-only STEP plus separately classified conceptual CadQuery artifacts.
 
 ## Development setup
 
@@ -53,6 +54,41 @@ uv run mbse-lite update-attribute ../projects/demo_project PART-001 Description 
 ```
 
 The command resolves the exact Markdown cell from parser provenance, re-locates the row by stable ID, validates a temporary candidate project, and commits atomically. `--expect` rejects stale values and `--dry-run` never changes a file. Generic updates cannot change the `ID` column.
+
+## Optional CadQuery export
+
+Normal installation and every non-CAD command remain independent from CadQuery. To work on the optional CAD path, use a separate environment with Python 3.12 and install both extras:
+
+```bash
+uv sync --extra dev --extra cad
+```
+
+CadQuery 2.8.0 is selected exactly for this proof of concept. It is the stable release tested with `cadquery-ocp` 7.9.3.1.1. Although that OCP release publishes wheels for newer interpreters, CadQuery's pip installation guidance currently documents support only through Python 3.12, so the dedicated CAD CI job uses 3.12. The unchanged core CI job continues to use Python 3.13.
+
+The evaluated Windows pip/uv environments successfully generated and verified every artifact but then failed nondeterministically during CadQuery/OCP interpreter teardown, with both `0xC0000005` access violations and the upstream `0xC0000374` shutdown defect tracked in [CadQuery issue #1911](https://github.com/CadQuery/cadquery/issues/1911). CAD now runs in a disposable child process, so the main CLI never imports CadQuery/OCP. After atomically publishing validated completion evidence and explicitly flushing its streams, a successful worker calls `os._exit(0)` before unstable native teardown begins. Exit `0` is therefore the expected Windows success path. `0xC0000005` is always rejected; the exact `0xC0000374` rule remains only as a strictly validated warning fallback. The Linux Python 3.12 CAD CI job remains the supported automated gate for V0.6.
+
+Export the garden-shed CAD artifacts:
+
+```bash
+uv run mbse-lite export-cad ../projects/garden_tool_shed ../generated/garden_tool_shed/cad
+```
+
+The command validates the full model and visualization profile before launching the isolated CAD worker. Validation errors stop export. If CadQuery is absent, the command reports the optional-install command without exposing a raw import traceback.
+
+The output contains:
+
+```text
+generated/garden_tool_shed/cad/
+├── footprint.step             # engineering authority: footprint only
+├── conceptual-preview.step    # visualization-only
+├── conceptual-preview.glb     # visualization-only
+├── cad-manifest.json          # generated metadata, not source of truth
+└── cad-job-result.json        # atomic worker-completion evidence
+```
+
+`footprint.step` is a planar 4000 mm × 1200 mm CAD face sourced from the structured REQ-008 quantities. It has zero Z extent: no height or material thickness is inferred. The two conceptual previews reuse that footprint and the explicitly mapped PART identities, but all unresolved height, wall, floor, door, ramp, shelving and layout values come only from `GardenShedVisualizationSpec` and remain non-authoritative.
+
+CadQuery 2.8.0 preserves the seven direct assembly PART names through STEP re-import and as GLB node names in the tested export. Its GLB does not emit the current viewer's `extras.mbse_id` metadata, so `mbse-lite view` deliberately keeps its proven custom GLB generator and requires no CAD dependency. The parent accepts an export only after cross-checking the job-specific completion record, artifact sizes, manifest, footprint extent and identity evidence. See `docs/CAD_ARCHITECTURE.md` for the process, authority, unit, manifest and identity contracts.
 
 ## Local web viewer
 
@@ -142,5 +178,6 @@ See `docs/VIEW_ARCHITECTURE.md` for the V0.5 manifest schema, source provenance,
 - `docs/APP_REQUIREMENTS.md` — requirements for the application itself.
 - `docs/DEVELOPMENT_RULES.md` — rules for evolving the toolkit.
 - `docs/VIEW_ARCHITECTURE.md` — generated view manifest and renderer contracts.
+- `docs/CAD_ARCHITECTURE.md` — optional CadQuery adapter, authority and artifact contracts.
 
 Project-specific engineering information does not belong in this directory.

@@ -250,9 +250,9 @@ Those values are visualization state only. They are neither written back to Mark
 
 The deterministic GLB writer has no added Python dependency. It writes glTF 2.0 box primitives, materials, transforms and node metadata into one binary asset. It is deliberately a conceptual exchange/view generator, not a CAD kernel.
 
-## Intentionally deferred
+## Relationship to the optional V0.6 CAD backend
 
-V0.5 does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed CAD, construction geometry or parametric modeling. The intended future boundary is:
+The V0.5 viewer still does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed construction geometry or parametric editing. V0.6 realizes the previously planned CAD boundary as a separate optional export path:
 
 ```text
 Markdown MBSE
@@ -261,14 +261,14 @@ role/profile mapping
      ↓
 geometry specification
      ↓
-CadQuery or another domain generator
+pure parent CAD runner
+     ↓ isolated worker process
+optional CadQuery adapter
      ↓
-SVG / GLB / STEP
-     ↓
-Web viewer
+footprint-only STEP + conceptual STEP/GLB + validated completion record
 ```
 
-CadQuery is not implemented in V0.5. A future CAD generator can consume the typed geometry specification and replace or augment the simple box-based GLB writer without changing the viewer, stable-ID or shared-selection contracts.
+`mbse-lite export-cad` consumes the same typed geometry and visualization-role mapping, but it does not change `mbse-lite view`. Its main process validates and serializes the job, while a disposable worker is the only process that imports CadQuery/OCP. The CadQuery GLB preserves stable PART IDs as node names in the tested exporter, but does not emit the viewer's stronger `extras.mbse_id` selection metadata. The deterministic custom viewer GLB therefore remains the default. See `CAD_ARCHITECTURE.md` for the optional dependency, process boundary, authority, unit and artifact contracts.
 
 ## Future local serve-mode contract
 
@@ -296,7 +296,7 @@ validation
 refreshed project snapshot
 ```
 
-The framework remains deliberately unspecified and replaceable; V0.5 does not select Flask, FastAPI, Django or another server stack.
+The framework remains deliberately unspecified and replaceable; V0.5 does not select Flask, FastAPI, Django or another server stack. If serve mode later exposes CAD generation, its long-running process must call the existing pure parent CAD runner and must never import the worker-only CadQuery backend.
 
 ```text
 STATIC MODE                          FUTURE EDITABLE MODE

@@ -6,6 +6,7 @@ from .garden_shed import (
     GARDEN_SHED_PROFILE,
     GARDEN_SHED_REQUIRED_ROLES,
     build_garden_shed_geometry_spec,
+    build_garden_shed_visualization_spec,
     generate_garden_shed_views,
 )
 from .profile import (
@@ -55,6 +56,7 @@ def validate_visualizations(model: Model) -> list[tuple[str, str]]:
 __all__ = [
     "GeneratedViews",
     "build_generated_views",
+    "build_garden_shed_visualization_spec",
     "load_visualization_profiles",
     "resolve_visualization_profile",
     "validate_visualizations",

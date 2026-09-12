@@ -97,7 +97,11 @@ def build_garden_shed_geometry_spec(
     )
 
 
-def _visualization_spec(roles: Mapping[str, ModelObject]) -> GardenShedVisualizationSpec:
+def build_garden_shed_visualization_spec(
+    roles: Mapping[str, ModelObject],
+) -> GardenShedVisualizationSpec:
+    """Combine authoritative footprint data with visualization-only defaults."""
+
     geometry = build_garden_shed_geometry_spec(roles)
     length = geometry.external_length
     depth = geometry.external_depth
@@ -561,7 +565,7 @@ def generate_garden_shed_views(model: Model) -> GeneratedViews | None:
     )
     if roles is None:
         return None
-    spec = _visualization_spec(roles)
+    spec = build_garden_shed_visualization_spec(roles)
     visualization_defaults = {
         "height_m": spec.conceptual_height,
         "wall_thickness_m": spec.wall_thickness,

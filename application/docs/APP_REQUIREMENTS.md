@@ -42,6 +42,17 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-036 | Geometry-relevant concepts shall be selected through explicit visualization-profile roles rather than a global scan of similarly named or similarly staged Concepts. | Implemented |
 | APP-REQ-037 | The static viewer shall load its manifest, model, text assets, binary assets and asset errors through a read-only embedded data provider while preserving the existing renderer context and shared selection contract. | Implemented |
 | APP-REQ-038 | A future local serve mode shall use the same renderer architecture with a replaceable HTTP data provider and shall route writes through validated application commands to authoritative Markdown rather than editing generated JSON. | Guiding |
+| APP-REQ-039 | CadQuery support shall remain an optional dependency loaded only by explicit CAD operations; all existing non-CAD commands and the static viewer shall remain usable without it. | Implemented |
+| APP-REQ-040 | The CadQuery adapter shall convert validated engineering Quantities centrally to millimetres and shall reject unsupported, non-finite or non-positive values before calling CadQuery. | Implemented |
+| APP-REQ-041 | The authoritative garden-shed CAD artifact shall represent only the structured external footprint as a zero-thickness planar shape and shall not infer an engineering height or material thickness. | Implemented |
+| APP-REQ-042 | Conceptual CadQuery STEP/GLB previews and their unresolved dimensions shall be explicitly classified as visualization-only, separately from the footprint-only engineering artifact. | Implemented |
+| APP-REQ-043 | CAD artifact metadata shall record source provenance, authority, scope and stable-identity evidence while remaining generated data rather than an engineering source of truth. | Implemented |
+| APP-REQ-044 | CAD export shall stop on ERROR validation findings and shall report unavailable optional dependencies as concise actionable errors. | Implemented |
+| APP-REQ-045 | CadQuery and OCP shall execute only in an isolated worker process; the CLI, public CAD API and any future long-running application process shall use a parent-side runner that does not import the CAD backend. | Implemented |
+| APP-REQ-046 | A CAD worker shall atomically publish a job-specific completion record only after all required artifacts exist and footprint, authority, provenance and stable-identity checks pass; the parent shall independently validate that evidence. | Implemented |
+| APP-REQ-047 | A nonzero CAD-worker exit shall fail except on Windows for the exact `0xC0000374` heap-corruption status after a fully valid completion record and artifacts, which may succeed with a warning only as a defensive fallback; `0xC0000005` shall always fail. | Implemented |
+| APP-REQ-048 | A future local serve mode shall route every CAD operation through the isolated parent runner and shall not import CadQuery/OCP into the server process. | Guiding |
+| APP-REQ-049 | After successful atomic completion publication and explicit stdout/stderr flushing, the isolated CAD worker shall terminate with `os._exit(0)` before CadQuery/OCP interpreter teardown; no failure path or parent/server process shall use that controlled success exit. | Implemented |
 
 ## Rule for adding requirements
 
