@@ -22,6 +22,7 @@ Current POC capabilities:
 - safely update one existing Markdown object attribute with optimistic concurrency and validation,
 - parse explicitly sourced structured geometry quantities with deterministic decimal values,
 - optionally export a footprint-only STEP plus separately classified conceptual CadQuery artifacts.
+- optionally package an already generated, validated conceptual CadQuery GLB in the static viewer.
 
 ## Development setup
 
@@ -88,7 +89,7 @@ generated/garden_tool_shed/cad/
 
 `footprint.step` is a planar 4000 mm × 1200 mm CAD face sourced from the structured REQ-008 quantities. It has zero Z extent: no height or material thickness is inferred. The two conceptual previews reuse that footprint and the explicitly mapped PART identities, but all unresolved height, wall, floor, door, ramp, shelving and layout values come only from `GardenShedVisualizationSpec` and remain non-authoritative.
 
-CadQuery 2.8.0 preserves the seven direct assembly PART names through STEP re-import and as GLB node names. A deterministic pure-Python bridge adds each explicit job identity as matching `node.extras.mbse_id`, then re-reads the GLB before success is recorded. The parent independently parses the artifact and rejects missing, conflicting or tampered name/extras evidence. `mbse-lite view` deliberately keeps its proven custom GLB generator and requires no CAD dependency; production integration is out of scope, and the CadQuery preview remains millimetre-scaled. See `docs/CAD_ARCHITECTURE.md` for the process, authority, unit, manifest and identity contracts.
+CadQuery 2.8.0 preserves the seven direct assembly PART names through STEP re-import and as GLB node names. A deterministic pure-Python bridge adds each explicit job identity as matching `node.extras.mbse_id`, then re-reads the GLB before success is recorded. The parent independently parses the artifact and rejects missing, conflicting or tampered name/extras evidence. The generated GLB remains millimetre-scaled; the optional viewer integration converts it to metre-scaled viewer world units without rewriting the artifact. See `docs/CAD_ARCHITECTURE.md` for the process, authority, unit, manifest and identity contracts.
 
 ## Local web viewer
 
@@ -130,6 +131,14 @@ Generate without opening the browser:
 uv run mbse-lite view ../projects/garden_tool_shed --no-open
 ```
 
+To replace only the generated 3D representation with an already completed CAD preview, supply its directory explicitly:
+
+```bash
+uv run mbse-lite view ../projects/garden_tool_shed --cad-preview-dir ../generated/garden_tool_shed/cad --no-open
+```
+
+`view` never searches for CAD output and never runs or imports CadQuery/OCP. It validates the completion record, recorded artifact sizes, manifest authority/scope/backend metadata and the actual GLB `extras.mbse_id` identities using pure Python. Invalid, stale, incomplete or inconsistent evidence fails the command; there is no silent fallback. Without `--cad-preview-dir`, the existing custom `views/model.glb` remains the unchanged default.
+
 Or choose an explicit output path:
 
 ```bash
@@ -152,6 +161,10 @@ That mode will run on local HTTP, load snapshots through a future `HttpDataProvi
 
 SVG elements use `data-mbse-id`; glTF nodes use `extras.mbse_id`. Clicking either interactive representation selects the same object used by the list and detail panel, while selecting elsewhere highlights the matching representation when that view is active. A 5-pixel movement threshold distinguishes selection clicks from orbit drags.
 
+For an optional CAD preview, `viewer.json` identifies the asset role, visualization-only authority, source unit, scale to viewer metres and `extras.mbse_id` contract. The renderer applies the metadata-derived `0.001` scale for `mm` before bounds and camera framing. It also shows “Conceptual CAD preview — visualization only”; the authoritative CAD representation remains the footprint-only STEP.
+
+Conceptual SVG, custom GLB and CadQuery geometry share the same left-to-right convention: mower zone at low X, right-end shelving at high X, with the floor plan's bottom/door side treated as the front. CadQuery generation maps that canonical front through the exporter's axis rotation so the viewer receives it on +Z; no browser mirroring or camera-specific correction is used.
+
 Core browser dependencies are local and pinned: Three.js `0.180.0` (including bundled `GLTFLoader` and `OrbitControls`) and Mermaid `11.17.2`. Generation copies classic-script builds from Python package resources to `assets/vendor/`; classic scripts avoid local ES-module imports that some browsers reject under `file://`. If a local dependency is missing or a view asset is malformed, that view shows a localized message while unrelated views remain usable.
 
 The garden-shed project opts into its generator through `projects/garden_tool_shed/visualization.md`. Its reserved Markdown table maps `Visualization Profile` + `Role` to an existing `Object ID` and `Expected Type`. In addition to the modeled parts and structured footprint source, the explicit `mower_door_candidate` and `main_door_candidate` roles select the only Concepts used in displayed-candidate metadata. The mapping supplies visualization semantics only; it neither duplicates nor changes the engineering definition. Missing objects, wrong types and missing generator-required roles fail validation clearly. A project without the `garden_shed` profile does not activate those views.
@@ -170,7 +183,7 @@ npm run build
 
 `package-lock.json` pins the complete update toolchain, including esbuild `0.25.9`. Normal Python installation, testing and viewer generation do not require Node. Three.js and Mermaid are MIT-licensed; their license files are packaged and copied beside the browser assets. Dependency upgrades must retain upstream notices and recheck licenses, including Mermaid's bundled transitive code.
 
-See `docs/VIEW_ARCHITECTURE.md` for the V0.5 manifest schema, source provenance, offline packaging, visualization-profile, SVG/glTF identity, binary transport, renderer lifecycle and object-selection contracts.
+See `docs/VIEW_ARCHITECTURE.md` for the V0.8 viewer architecture, retained V0.5 manifest schema, source provenance, offline packaging, optional CAD boundary, SVG/glTF identity, binary transport, renderer lifecycle and object-selection contracts.
 
 ## Documentation
 

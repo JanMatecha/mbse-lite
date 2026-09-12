@@ -13,7 +13,10 @@ from types import ModuleType
 from typing import Any
 
 from ..geometry import GardenShedGeometrySpec, Quantity
-from ..visualization.garden_shed import GardenShedVisualizationSpec
+from ..visualization.garden_shed import (
+    GardenShedVisualizationSpec,
+    build_conceptual_longitudinal_layout,
+)
 from .glb_identity import enrich_glb_identities, inspect_glb_identity
 from .protocol import (
     CAD_ARTIFACT_FILENAMES,
@@ -173,20 +176,25 @@ def build_conceptual_preview(
     )
 
     half = _D("0.5")
+    layout = build_conceptual_longitudinal_layout(spec)
     left = -length * half
     right = length * half
-    front = depth * half
-    rear = -depth * half
-    mower_length = length * Decimal(str(spec.mower_fraction))
+    # CadQuery exports Z-up assemblies with a -90° X root rotation. Its +Y
+    # therefore becomes Three.js -Z. Map the canonical viewer front (+depth)
+    # to CadQuery -Y so the exported preview is viewed from the same side as
+    # the floor plan and custom GLB.
+    front = -depth * half
+    rear = depth * half
+    mower_length = length * Decimal(str(layout.mower_end))
     split = left + mower_length
     main_length = length - mower_length
     zone_depth = max(depth - 2 * wall, depth * _D("0.8"))
-    main_door_left = left + length * Decimal(str(spec.main_door_start))
-    main_door_width = length * Decimal(str(spec.main_door_fraction))
+    main_door_left = left + length * Decimal(str(layout.main_door_start))
+    main_door_width = length * Decimal(str(layout.main_door_width))
     main_leaf_width = max(main_door_width * half - _D("15"), _D("50"))
-    mower_door_left = left + mower_length * Decimal(str(spec.mower_door_start))
-    mower_door_width = mower_length * Decimal(str(spec.mower_door_fraction))
-    door_y = front + wall * half
+    mower_door_left = left + length * Decimal(str(layout.mower_door_start))
+    mower_door_width = length * Decimal(str(layout.mower_door_width))
+    door_y = front - wall * half
     door_z = floor + door_height * half
     ramp_rise = floor * 2
     ramp_angle = math.degrees(
@@ -199,7 +207,7 @@ def build_conceptual_preview(
             _box(
                 cq,
                 (length, wall, height),
-                (_D("0"), rear + wall * half, height * half),
+                (_D("0"), rear - wall * half, height * half),
             ),
             _box(
                 cq,
@@ -214,7 +222,7 @@ def build_conceptual_preview(
             _box(
                 cq,
                 (length, wall, floor * 2),
-                (_D("0"), front - wall * half, floor),
+                (_D("0"), front + wall * half, floor),
             ),
         ],
         "main_storage": [
@@ -265,7 +273,7 @@ def build_conceptual_preview(
                 (mower_door_width * _D("1.08"), ramp_length, floor * _D("0.55")),
                 (
                     mower_door_left + mower_door_width * half,
-                    front + ramp_length * half,
+                    front - ramp_length * half,
                     ramp_rise * half,
                 ),
                 rotate_x_degrees=ramp_angle,
@@ -275,13 +283,19 @@ def build_conceptual_preview(
             _box(
                 cq,
                 (
-                    length * Decimal(str(spec.shelving_fraction)),
+                    length * Decimal(str(layout.shelving_width)),
                     depth * _D("0.72"),
                     shelving_height,
                 ),
                 (
-                    right
-                    - length * Decimal(str(spec.shelving_fraction)) * half,
+                    left
+                    + length
+                    * Decimal(
+                        str(
+                            layout.shelving_start
+                            + layout.shelving_width / 2
+                        )
+                    ),
                     _D("0"),
                     floor + shelving_height * half,
                 ),

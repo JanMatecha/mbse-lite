@@ -5,6 +5,8 @@ from ._types import GeneratedViews
 from .garden_shed import (
     GARDEN_SHED_PROFILE,
     GARDEN_SHED_REQUIRED_ROLES,
+    ConceptualLongitudinalLayout,
+    build_conceptual_longitudinal_layout,
     build_garden_shed_geometry_spec,
     build_garden_shed_visualization_spec,
     generate_garden_shed_views,
@@ -55,7 +57,9 @@ def validate_visualizations(model: Model) -> list[tuple[str, str]]:
 
 __all__ = [
     "GeneratedViews",
+    "ConceptualLongitudinalLayout",
     "build_generated_views",
+    "build_conceptual_longitudinal_layout",
     "build_garden_shed_visualization_spec",
     "load_visualization_profiles",
     "resolve_visualization_profile",

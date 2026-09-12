@@ -48,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
     view = sub.add_parser("view", help="Generate and open a local interactive web viewer bundle")
     _add_project_argument(view)
     view.add_argument("--output", type=Path, default=None, help="Optional output HTML path")
+    view.add_argument(
+        "--cad-preview-dir",
+        type=Path,
+        default=None,
+        help="Use an already generated and validated conceptual CadQuery GLB",
+    )
     view.add_argument("--no-open", action="store_true", help="Generate the viewer without opening a browser")
 
     cad = sub.add_parser(
@@ -157,8 +163,19 @@ def main() -> int:
         return 1 if any(severity == "ERROR" for severity, _ in findings) else 0
 
     if args.command == "view":
+        from .cad import CadError
+
         output = args.output or _default_viewer_output(args.project)
-        export_viewer(model, output, project_name=args.project.resolve().name)
+        try:
+            export_viewer(
+                model,
+                output,
+                project_name=args.project.resolve().name,
+                cad_preview_dir=args.cad_preview_dir,
+            )
+        except (CadError, ValueError, OSError) as error:
+            print(f"ERROR: {error}")
+            return 1
         print(f"Written: {output}")
         if not args.no_open:
             webbrowser.open(output.resolve().as_uri())

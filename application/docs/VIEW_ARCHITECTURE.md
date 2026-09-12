@@ -1,10 +1,10 @@
-# View Architecture V0.5
+# View Architecture V0.8
 
 ## Purpose
 
 A **View** is one representation of the shared MBSE Lite model. A view does not own engineering identity or become a second model: it references objects through the same stable IDs used in the authoritative Markdown.
 
-View Architecture V0.5 separates three concerns:
+View Architecture V0.8 preserves the V0.5 manifest schema while separating three concerns:
 
 1. Markdown parsing produces the internal MBSE model.
 2. generation produces a renderer-neutral `model.json`, a navigation-oriented `viewer.json` and any view assets,
@@ -42,7 +42,7 @@ generated/<project>/
 
 Pinned browser dependencies are copied from Python package resources into `assets/vendor/`. The HTML loads them as classic sibling scripts, not through `fetch()`, dynamic imports or an import map. This avoids local ES-module origin restrictions that differ across browsers and keeps double-click `file://` use as the default workflow.
 
-`model.json` contains objects, relations, supporting tables, validation findings and summary counts. Each object includes its stable `id`, source file, source reference, attribute source references and MBSE/project-management area. Relations and supporting tables retain row/table references as well. These locators describe authoritative Markdown; `model.json` remains derived. `viewer.json` describes available views and grouped navigation. The garden-shed generator contributes both `floorplan.svg` and `model.glb`; both render under direct file opening through their separate text and binary embedding paths.
+`model.json` contains objects, relations, supporting tables, validation findings and summary counts. Each object includes its stable `id`, source file, source reference, attribute source references and MBSE/project-management area. Relations and supporting tables retain row/table references as well. These locators describe authoritative Markdown; `model.json` remains derived. `viewer.json` describes available views and grouped navigation. The garden-shed generator contributes both `floorplan.svg` and the default `model.glb`; both render under direct file opening through their separate text and binary embedding paths. An explicit `--cad-preview-dir` replaces only that 3D asset and view metadata with a validated `conceptual-preview.glb`.
 
 ## Browser data provider and bootstrap
 
@@ -182,6 +182,26 @@ A glTF node representing an engineering object carries the existing stable ID in
 
 `GLTFLoader` preserves node extras in `Object3D.userData`. The renderer records primary `pointerdown`, tracks movement, and raycasts only on `pointerup` when movement remained below 5 pixels. OrbitControls therefore receives the same pointer stream, but an orbit drag does not accidentally select an object. Raycasting starts at the clicked mesh and searches upward for the nearest `userData.mbse_id`, then calls `context.setSelectedObject(id)`. The 3D renderer never owns a second authoritative selection value.
 
+## Optional CAD preview boundary
+
+`mbse-lite view PROJECT --cad-preview-dir PATH` consumes already generated CAD output only. Pure-Python validation requires valid completion and manifest JSON, matching non-empty artifact sizes, completed semantic checks, a visualization-only/conceptual-preview GLB classification, a supported explicit backend unit and complete identity agreement among completion evidence, manifest evidence and the parsed GLB. Component IDs must exist in the current project model. Failure is explicit and never falls back to the custom GLB. The normal path neither searches for output nor imports or invokes CadQuery/OCP.
+
+The CAD-preview view config carries `asset_role`, `authority`, `source_unit`, `viewer_scale` and `identity_contract`. The unit path is:
+
+```text
+CadQuery GLB (mm, extras.mbse_id)
+        ↓ static viewer packaging
+viewer metadata (viewer_scale = 0.001)
+        ↓ modelRoot.scale.setScalar before Box3 framing
+Three.js world (m, userData.mbse_id)
+        ↓
+existing selectedObjectId contract
+```
+
+Only `m` and `mm` are supported at this boundary. The renderer scales the scene root; it does not mutate vertex buffers, the source GLB, manifest data, engineering dimensions or `GeometrySpec`. The active CAD view displays a visualization-only notice. `node.name` remains evidence and is never a browser selection fallback.
+
+The renderer also assumes the generated conceptual coordinate convention: +X runs from the floor-plan left end to its right end, +Y is vertical after GLB loading, and +Z is the front/door side. CadQuery generation accounts for its exporter's axis rotation before producing the GLB; the browser does not mirror the model or compensate with a special camera.
+
 On `onSelectionChanged(id)`, every descendant mesh whose nearest mapped ancestor has that ID receives a cloned highlight material. Before another selection or unmount, the renderer disposes those clones and restores the exact original material references.
 
 Every renderer must treat `unmount()` as final for that instance. The glTF renderer marks itself disposed before cleanup, cancels its animation frame, disconnects its `ResizeObserver`, removes all pointer listeners, disposes OrbitControls, geometries, materials, textures, helper resources and the WebGL renderer, then explicitly releases the context. If `GLTFLoader.parse()` completes after unmount, the newly returned scenes are traversed and disposed without being attached. Cleanup is idempotent enough for normal errors and repeated `3D → SVG → 3D → Requirements → 3D` cycles.
@@ -270,7 +290,7 @@ pure-Python GLB identity bridge
 footprint-only STEP + conceptual STEP/GLB + validated completion record
 ```
 
-`mbse-lite export-cad` consumes the same typed geometry and visualization-role mapping, but it does not change `mbse-lite view`. Its main process validates and serializes the job, while a disposable worker is the only process that imports CadQuery/OCP. CadQuery preserves stable PART IDs as node names; the bridge copies only the explicitly expected identities into `node.extras.mbse_id`, which GLTFLoader exposes as `Object3D.userData.mbse_id` for the existing selection contract. Node names remain useful but are not the authoritative browser identity. The deterministic custom viewer GLB remains the production default, and the CadQuery GLB remains millimetre-scaled pending a future integration decision. See `CAD_ARCHITECTURE.md` for the optional dependency, process boundary, authority, unit and artifact contracts.
+`mbse-lite export-cad` consumes the same typed geometry and visualization-role mapping. Its main process validates and serializes the job, while a disposable worker is the only process that imports CadQuery/OCP. `mbse-lite view` may later consume those completed artifacts only when their directory is explicit. CadQuery preserves stable PART IDs as node names; the bridge copies only the explicitly expected identities into `node.extras.mbse_id`, which GLTFLoader exposes as `Object3D.userData.mbse_id` for the existing selection contract. Node names remain useful but are not the authoritative browser identity. The deterministic custom viewer GLB remains the default. See `CAD_ARCHITECTURE.md` for the optional dependency, process boundary, authority, unit and artifact contracts.
 
 ## Future local serve-mode contract
 

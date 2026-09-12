@@ -54,6 +54,9 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-048 | A future local serve mode shall route every CAD operation through the isolated parent runner and shall not import CadQuery/OCP into the server process. | Guiding |
 | APP-REQ-049 | After successful atomic completion publication and explicit stdout/stderr flushing, the isolated CAD worker shall terminate with `os._exit(0)` before CadQuery/OCP interpreter teardown; no failure path or parent/server process shall use that controlled success exit. | Implemented |
 | APP-REQ-050 | A CadQuery GLB conceptual preview shall map the CAD job's explicit stable component identities to matching `node.name` and `node.extras.mbse_id` values without changing geometry, and worker and parent validation shall reject incomplete, conflicting or artifact-inconsistent identity evidence. | Implemented |
+| APP-REQ-051 | The static viewer may explicitly consume an already completed CadQuery conceptual GLB only after dependency-free validation of completion, artifact, authority, scope, unit and `extras.mbse_id` evidence; the default custom GLB path shall remain unchanged and shall not import or invoke CadQuery/OCP. | Implemented |
+| APP-REQ-052 | The glTF renderer shall convert a validated CAD source unit of `mm` to metre-based viewer world units by applying metadata-derived scene-root scale `0.001` before bounds and camera framing, while preserving the source artifact and shared stable-ID selection contract. | Implemented |
+| APP-REQ-053 | Conceptual SVG, custom GLB and CadQuery preview generation shall share a left-to-right longitudinal placement convention and shall map the door/front side consistently before export without browser mirroring, camera compensation or stable-ID reassignment. | Implemented |
 
 ## Rule for adding requirements
 

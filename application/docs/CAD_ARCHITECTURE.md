@@ -1,8 +1,8 @@
-# Optional CAD Architecture — V0.7
+# Optional CAD Architecture — V0.8
 
 ## Scope
 
-V0.7 adds one narrow identity-contract bridge to the isolated CAD path without replacing the production viewer GLB or claiming a complete shed CAD model:
+V0.8 preserves the isolated V0.7 identity bridge and adds one explicit, optional production-viewer consumption boundary without claiming a complete shed CAD model:
 
 ```text
 authoritative project Markdown
@@ -20,6 +20,10 @@ raw conceptual GLB
 final conceptual GLB with `node.extras.mbse_id`
         ↓
 footprint STEP + conceptual STEP/GLB + manifest + completion record
+        ↓ explicit `view --cad-preview-dir` only
+pure-Python evidence validation + mm-to-m scene-root scale
+        ↓
+existing offline Three.js renderer and selectedObjectId contract
 ```
 
 `mbse_lite.geometry`, `mbse_lite.cad.protocol`, `mbse_lite.cad.glb_identity` and `mbse_lite.cad.runner` have no CadQuery dependency. The main process validates the model and serializes a job; only `mbse_lite.cad.worker` imports `mbse_lite.cad.cadquery_backend`, and only that backend imports CadQuery. Importing MBSE Lite, importing the public CAD package, or invoking any CLI command never loads CadQuery/OCP into the main process.
@@ -90,6 +94,12 @@ The conceptual assembly represents the existing visualization roles for PART-001
 
 Each direct CadQuery assembly child is named with its mapped stable PART ID. After CadQuery export, the dependency-free GLB bridge receives the exact component mapping from the CAD job-derived preview, requires exactly one matching node per expected name, and adds the same stable ID as `node.extras.mbse_id`. It merges existing extras, rejects conflicts or unexpected identity metadata, preserves every non-JSON chunk byte-for-byte, and atomically replaces the GLB before re-reading it for semantic validation. Candidate metadata still comes only from the explicit `mower_door_candidate` and `main_door_candidate` roles. Adding an unrelated preferred Concept cannot affect the assembly component set.
 
+### Conceptual coordinate convention
+
+All three conceptual representations share one normalized longitudinal placement: X=0 is the left end shown in the floor plan, X=1 is the right end, the mower zone occupies the low-X end, and shelving occupies the high-X end. In physical coordinates the centered custom GLB and CadQuery preview use X from `-length/2` to `+length/2`. The floor plan's bottom long side is the canonical front. The custom GLB maps that side to +Z and uses +Y vertically.
+
+CadQuery uses Z vertically. Its GLB exporter adds a -90° rotation about X, mapping CadQuery +Y to viewer -Z. Conceptual CadQuery geometry therefore maps canonical front depth to CadQuery -Y, which exports to viewer +Z. This is a geometry-generation mapping, not a browser mirror or camera correction. Longitudinal fractions come from the shared `ConceptualLongitudinalLayout`; IDs and engineering footprint dimensions are unchanged.
+
 The browser identity path is therefore:
 
 ```text
@@ -119,6 +129,8 @@ The V0.7 result changes the truth value of existing schema `0.6` identity eviden
 
 The manifest is reproducible generated metadata. It is not read back as project input and cannot override Markdown.
 
+It may be read as validation and presentation metadata only when an operator explicitly supplies its containing directory to `mbse-lite view --cad-preview-dir`. That consumption cannot modify project Markdown, CAD artifacts or engineering dimensions.
+
 ## Completion protocol and exit classification
 
 The worker publishes `cad-job-result.json` with a temporary sibling file plus `os.replace`, and only after all four required artifacts are in their final locations. The record includes the unique job ID, exact artifact sizes, backend identity, stable IDs and mandatory semantic-check results. Before publishing it, the worker:
@@ -144,7 +156,9 @@ Exit classification is deliberately exact:
 
 With CadQuery 2.8.0/OCP 7.9.3.1.1, the seven direct PART names survive semantic STEP assembly re-import and appear as exact raw GLB node names. CadQuery does not emit `node.extras.mbse_id`, so the V0.7 bridge adds that metadata only for the explicit expected component mapping. It never infers authority from a name pattern or scans arbitrary `PART-*` names.
 
-The resulting GLB now satisfies the current viewer identity contract, but V0.7 deliberately leaves `mbse-lite view`, its deterministic custom `views/model.glb`, and its selection behavior unchanged. The CadQuery GLB also remains millimetre-scaled (approximately 4000 × 2220 × 1997), unlike the approximately metre-scaled production viewer GLB. Scaling and production integration remain future work.
+The resulting GLB satisfies the current viewer identity contract. V0.8 optionally packages it through explicit `mbse-lite view --cad-preview-dir`; the deterministic custom `views/model.glb` remains the default. The source artifact remains millimetre-scaled (approximately 4000 × 2220 × 1997). Validated `backend.internal_length_unit` metadata produces `viewer_scale = 0.001`, applied to the Three.js scene root before bounds and camera framing. This presentation transform does not rewrite the GLB or change engineering data. Selection still uses only `extras.mbse_id` / `userData.mbse_id`.
+
+The viewer-side consumer repeats the safety evidence relevant to packaging without CadQuery/OCP: completion and manifest JSON, exact recorded artifact files and sizes, completed semantic checks, matching backend metadata, visualization-only authority, conceptual-preview scope, supported `m`/`mm` unit, project-owned component IDs, and exact completion/manifest/actual-GLB identity agreement. An explicitly requested but invalid preview fails; it never silently selects the custom asset.
 
 ## Validation, writes and determinism
 
@@ -154,4 +168,4 @@ Tests assert semantic determinism rather than byte equality: dimensions, shape t
 
 ## Future direction
 
-Later versions may move a dimension from visualization-only state into structured Markdown only after a requirement or decision defines it. CadQuery can then consume the new typed domain value through the same unit boundary. Any future `serve` implementation must invoke the pure parent runner; it must never import or call the CadQuery backend in the long-running server process. Future production-viewer integration must explicitly resolve the known scaling difference; it must not infer missing geometry or replace Markdown as the source of truth.
+Later versions may move a dimension from visualization-only state into structured Markdown only after a requirement or decision defines it. CadQuery can then consume the new typed domain value through the same unit boundary. Any future `serve` implementation must invoke the pure parent runner; it must never import or call the CadQuery backend in the long-running server process. Viewer integration must not infer missing geometry or replace Markdown as the source of truth.

@@ -22,6 +22,13 @@ import mbse_lite.cad as cad_api
 from mbse_lite.cli import main
 from mbse_lite.core import SourceRef, load_model
 from mbse_lite.geometry import Quantity
+from mbse_lite.visualization import (
+    GARDEN_SHED_PROFILE,
+    GARDEN_SHED_REQUIRED_ROLES,
+    build_conceptual_longitudinal_layout,
+    build_garden_shed_visualization_spec,
+    resolve_visualization_profile,
+)
 
 
 def garden_shed_project() -> Path:
@@ -41,6 +48,71 @@ def quantity(value: Decimal, unit: str = "m") -> Quantity:
             line=12,
         ),
     )
+
+
+class _FakeShape:
+    def __init__(self, size, center, rotation=None):
+        self.size = size
+        self.center = center
+        self.rotation = rotation
+
+
+class _FakeWorkplane:
+    def __init__(self, _plane):
+        self.size = None
+        self.center = None
+        self.rotation = None
+
+    def box(self, *size, centered):
+        assert centered == (True, True, True)
+        self.size = size
+        return self
+
+    def translate(self, center):
+        self.center = center
+        return self
+
+    def rotate(self, start, end, angle):
+        self.rotation = (start, end, angle)
+        return self
+
+    def val(self):
+        return _FakeShape(self.size, self.center, self.rotation)
+
+
+class _FakeCompound:
+    @staticmethod
+    def makeCompound(shapes):
+        return SimpleNamespace(shapes=tuple(shapes))
+
+
+class _FakeAssembly:
+    def __init__(self, name):
+        self.name = name
+        self.objects = {}
+
+    def add(self, compound, *, name, color):
+        self.objects[name] = SimpleNamespace(obj=compound, color=color)
+
+
+class _FakeCadQuery:
+    Workplane = _FakeWorkplane
+    Compound = _FakeCompound
+    Assembly = _FakeAssembly
+    Color = staticmethod(lambda *channels: channels)
+
+
+def _garden_shed_visualization_spec():
+    model = load_model(garden_shed_project())
+    roles = resolve_visualization_profile(
+        model, GARDEN_SHED_PROFILE, GARDEN_SHED_REQUIRED_ROLES
+    )
+    assert roles is not None
+    return build_garden_shed_visualization_spec(roles)
+
+
+def _component_shapes(preview, object_id):
+    return preview.assembly.objects[object_id].obj.shapes
 
 
 def test_cadquery_is_an_optional_exactly_selected_dependency():
@@ -74,6 +146,53 @@ def test_general_application_imports_do_not_load_cadquery():
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_conceptual_renderers_share_left_to_right_layout_and_cad_front_mapping():
+    spec = _garden_shed_visualization_spec()
+    layout = build_conceptual_longitudinal_layout(spec)
+    preview = cadquery_backend.build_conceptual_preview(
+        spec, _cadquery=_FakeCadQuery
+    )
+
+    mower = _component_shapes(preview, "PART-005")[0]
+    main_door = _component_shapes(preview, "PART-008")
+    mower_door = _component_shapes(preview, "PART-010")[0]
+    ramp = _component_shapes(preview, "PART-011")[0]
+    shelving = _component_shapes(preview, "PART-012")[0]
+
+    assert layout.mower_end / 2 == pytest.approx(0.11)
+    assert layout.mower_door_start + layout.mower_door_width / 2 == pytest.approx(
+        0.1034
+    )
+    assert layout.main_door_start + layout.main_door_width / 2 == pytest.approx(
+        0.685
+    )
+    assert layout.shelving_start + layout.shelving_width / 2 == pytest.approx(
+        0.945
+    )
+
+    assert mower.center[0] == pytest.approx(-1560.0)
+    assert mower_door.center[0] == pytest.approx(-1586.4)
+    assert ramp.center[0] == pytest.approx(mower_door.center[0])
+    assert sum(shape.center[0] for shape in main_door) / 2 == pytest.approx(740.0)
+    assert shelving.center[0] == pytest.approx(1780.0)
+    assert mower.center[0] < shelving.center[0]
+
+    # CadQuery's -90° X export rotation maps CAD -Y to viewer +Z. Doors and
+    # ramp are therefore on the same visible front side as the floor plan.
+    assert mower_door.center[1] == pytest.approx(-630.0)
+    assert ramp.center[1] == pytest.approx(-1000.0)
+    assert mower_door.center[1] > ramp.center[1]
+    assert set(preview.component_ids) == {
+        "PART-001",
+        "PART-004",
+        "PART-005",
+        "PART-008",
+        "PART-010",
+        "PART-011",
+        "PART-012",
+    }
 
 
 def test_authoritative_quantity_conversion_is_exact_and_centralized():

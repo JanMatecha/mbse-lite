@@ -124,6 +124,7 @@ def export_viewer(
     project_name: str = "MBSE Lite Project",
     views: Sequence[ViewDefinition] | None = None,
     view_assets: Mapping[str, str | bytes] | None = None,
+    cad_preview_dir: str | Path | None = None,
 ) -> None:
     """Generate a read-only, manifest-driven web viewer bundle.
 
@@ -143,6 +144,63 @@ def export_viewer(
         generated = build_generated_views(model)
         definitions.extend(generated.views)
         assets.update(generated.assets)
+        if cad_preview_dir is not None:
+            from .cad.preview import validate_cad_preview
+            from .cad.protocol import CAD_COMPONENT_ROLES
+            from .visualization import (
+                GARDEN_SHED_PROFILE,
+                GARDEN_SHED_REQUIRED_ROLES,
+                resolve_visualization_profile,
+            )
+
+            roles = resolve_visualization_profile(
+                model, GARDEN_SHED_PROFILE, GARDEN_SHED_REQUIRED_ROLES
+            )
+            if roles is None:
+                raise ValueError(
+                    "CAD preview requires the project's conceptual-3d generated view"
+                )
+            expected_component_ids = tuple(
+                roles[role].id for role in CAD_COMPONENT_ROLES
+            )
+
+            preview = validate_cad_preview(
+                cad_preview_dir,
+                model_object_ids=set(model.objects),
+                expected_component_ids=expected_component_ids,
+            )
+            replacement = ViewDefinition(
+                id="conceptual-3d",
+                title="3D",
+                group="Geometry",
+                type="gltf",
+                source="views/conceptual-preview.glb",
+                description=(
+                    "Conceptual CAD preview generated from the model. It is for "
+                    "visualization only and is not construction-ready."
+                ),
+                config={
+                    "geometry_status": "conceptual",
+                    "asset_role": "conceptual-cad-preview",
+                    "authority": "visualization-only",
+                    "source_unit": preview.source_unit,
+                    "viewer_scale": preview.viewer_scale,
+                    "identity_contract": "extras.mbse_id",
+                    "notice": "Conceptual CAD preview — visualization only",
+                },
+            )
+            replaced = False
+            for index, definition in enumerate(definitions):
+                if definition.id == "conceptual-3d":
+                    definitions[index] = replacement
+                    replaced = True
+                    break
+            if not replaced:
+                raise ValueError(
+                    "CAD preview requires the project's conceptual-3d generated view"
+                )
+            assets.pop("views/model.glb", None)
+            assets["views/conceptual-preview.glb"] = preview.data
     else:
         definitions = list(views)
     if view_assets:
@@ -288,6 +346,7 @@ tbody tr.object-row { cursor: pointer; }
 .gltf-host canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .gltf-host canvas:active { cursor: grabbing; }
 .gltf-status { position: absolute; inset: auto 1rem 1rem 1rem; margin: 0; padding: .65rem .8rem; border-radius: .5rem; background: color-mix(in srgb, var(--panel) 90%, transparent); color: var(--muted); pointer-events: none; }
+.gltf-notice { position: absolute; inset: 1rem auto auto 1rem; z-index: 1; margin: 0; padding: .45rem .65rem; border-radius: .5rem; background: color-mix(in srgb, var(--panel) 92%, transparent); color: var(--muted); font-size: .82rem; pointer-events: none; }
 .link-button { border: 0; padding: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; font-weight: 600; }
 details { margin-top: 1rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -947,7 +1006,9 @@ function gltfRenderer(view, context) {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const notice = host.querySelector('.gltf-notice');
     host.replaceChildren(renderer.domElement);
+    if (notice) host.appendChild(notice);
 
     scene.add(new THREE.HemisphereLight(0xf8fbff, 0x53606c, 2.2));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
@@ -964,6 +1025,11 @@ function gltfRenderer(view, context) {
     }
     loadedScenes = parsedScenes;
     modelRoot = gltf.scene;
+    const viewerScale = Number(view.config?.viewer_scale ?? 1);
+    if (!Number.isFinite(viewerScale) || viewerScale <= 0) {
+      throw new Error('The GLB viewer scale must be finite and positive.');
+    }
+    modelRoot.scale.setScalar(viewerScale);
     modelRoot.traverse(object => {
       if (object.userData?.mbse_id) object.userData.mbse_id = String(object.userData.mbse_id);
     });
@@ -1007,7 +1073,10 @@ function gltfRenderer(view, context) {
     mount(container) {
       disposed = false;
       const source = safeAssetSource(view.source);
-      container.innerHTML = `${viewHeader(view)}<div class="scaffold gltf-host" data-gltf-host><p class="gltf-status">Loading conceptual 3D view…</p></div>`;
+      const notice = view.config?.notice
+        ? `<p class="gltf-notice">${escapeHtml(view.config.notice)}</p>`
+        : '';
+      container.innerHTML = `${viewHeader(view)}<div class="scaffold gltf-host" data-gltf-host>${notice}<p class="gltf-status">Loading conceptual 3D view…</p></div>`;
       host = container.querySelector('[data-gltf-host]');
       status = host.querySelector('.gltf-status');
       if (!source) {

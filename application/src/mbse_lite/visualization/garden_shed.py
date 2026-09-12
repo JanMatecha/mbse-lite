@@ -66,6 +66,35 @@ class GardenShedVisualizationSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class ConceptualLongitudinalLayout:
+    """Normalized left-to-right placement shared by every conceptual renderer."""
+
+    mower_end: float
+    main_door_start: float
+    main_door_width: float
+    mower_door_start: float
+    mower_door_width: float
+    shelving_start: float
+    shelving_width: float
+
+
+def build_conceptual_longitudinal_layout(
+    spec: GardenShedVisualizationSpec,
+) -> ConceptualLongitudinalLayout:
+    """Map X=0 at the left end and X=1 at the right end of the shed."""
+
+    return ConceptualLongitudinalLayout(
+        mower_end=spec.mower_fraction,
+        main_door_start=spec.main_door_start,
+        main_door_width=spec.main_door_fraction,
+        mower_door_start=spec.mower_fraction * spec.mower_door_start,
+        mower_door_width=spec.mower_fraction * spec.mower_door_fraction,
+        shelving_start=1.0 - spec.shelving_fraction,
+        shelving_width=spec.shelving_fraction,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class _Box:
     name: str
     center: tuple[float, float, float]
@@ -145,17 +174,18 @@ def _floor_plan_svg(spec: GardenShedVisualizationSpec) -> str:
     )
     x = 120.0
     y = 125.0
-    mower_width = envelope_width * spec.mower_fraction
-    shelf_width = envelope_width * spec.shelving_fraction
+    layout = build_conceptual_longitudinal_layout(spec)
+    mower_width = envelope_width * layout.mower_end
+    shelf_width = envelope_width * layout.shelving_width
     main_x = x + mower_width
     main_width = envelope_width - mower_width
     bottom = y + envelope_height
 
-    main_door_left = x + envelope_width * spec.main_door_start
-    main_door_width = envelope_width * spec.main_door_fraction
+    main_door_left = x + envelope_width * layout.main_door_start
+    main_door_width = envelope_width * layout.main_door_width
     main_door_mid = main_door_left + main_door_width / 2
-    mower_door_left = x + mower_width * spec.mower_door_start
-    mower_door_width = mower_width * spec.mower_door_fraction
+    mower_door_left = x + envelope_width * layout.mower_door_start
+    mower_door_width = envelope_width * layout.mower_door_width
     ramp_top_y = bottom + 5
     ramp_bottom_y = bottom + 92
 
@@ -258,16 +288,17 @@ def _box_groups(
     right = length / 2
     front = depth / 2
     rear = -depth / 2
-    mower_length = length * spec.mower_fraction
+    layout = build_conceptual_longitudinal_layout(spec)
+    mower_length = length * layout.mower_end
     split = left + mower_length
     main_length = length - mower_length
     zone_depth = max(depth - 2 * wall, depth * 0.8)
 
-    main_door_left = left + length * spec.main_door_start
-    main_door_width = length * spec.main_door_fraction
+    main_door_left = left + length * layout.main_door_start
+    main_door_width = length * layout.main_door_width
     main_leaf_width = max(main_door_width / 2 - 0.015, 0.05)
-    mower_door_left = left + mower_length * spec.mower_door_start
-    mower_door_width = mower_length * spec.mower_door_fraction
+    mower_door_left = left + length * layout.mower_door_start
+    mower_door_width = length * layout.mower_door_width
     door_z = front + wall * 0.55
     door_y = floor + spec.door_height / 2
 
@@ -387,12 +418,14 @@ def _box_groups(
                 _Box(
                     "Right-end shelving visualization volume",
                     (
-                        right - length * spec.shelving_fraction / 2,
+                        left
+                        + length
+                        * (layout.shelving_start + layout.shelving_width / 2),
                         floor + spec.shelving_height / 2,
                         0.0,
                     ),
                     (
-                        length * spec.shelving_fraction,
+                        length * layout.shelving_width,
                         spec.shelving_height,
                         depth * 0.72,
                     ),

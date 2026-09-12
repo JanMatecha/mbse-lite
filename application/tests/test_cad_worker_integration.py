@@ -79,10 +79,33 @@ const data = fs.readFileSync(process.argv[2]);
 const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
 const expected = JSON.parse(process.argv[3]);
 new mbseThreeModules.GLTFLoader().parse(arrayBuffer, "", (gltf) => {
+  gltf.scene.updateMatrixWorld(true);
   for (const id of expected) {
     const object = gltf.scene.getObjectByName(id);
     if (!object || object.userData.mbse_id !== id) process.exitCode = 2;
   }
+  const box = id => new mbseThreeModules.THREE.Box3().setFromObject(
+    gltf.scene.getObjectByName(id));
+  const center = id => box(id).getCenter(new mbseThreeModules.THREE.Vector3());
+  const mower = center("PART-005");
+  const mainDoor = center("PART-008");
+  const mowerDoor = center("PART-010");
+  const ramp = center("PART-011");
+  const shelving = center("PART-012");
+  if (!(mower.x < shelving.x)) process.exitCode = 3;
+  if (Math.abs(mowerDoor.x - ramp.x) > 0.001) process.exitCode = 4;
+  if (!(mowerDoor.z > 0 && ramp.z > mowerDoor.z && mainDoor.z > 0)) process.exitCode = 5;
+  let primitives = 0;
+  let triangles = 0;
+  gltf.scene.traverse(object => {
+    if (!object.isMesh) return;
+    primitives += 1;
+    triangles += object.geometry.index.count / 3;
+  });
+  if (primitives !== 72 || triangles !== 144) process.exitCode = 6;
+  const size = new mbseThreeModules.THREE.Box3().setFromObject(gltf.scene)
+    .getSize(new mbseThreeModules.THREE.Vector3());
+  if (Math.abs(size.x - 4000) > 0.001 || Math.abs(size.y - 2220.019228920474) > 0.001 || Math.abs(size.z - 1996.54682524941) > 0.001) process.exitCode = 7;
 }, (error) => {
   console.error(error);
   process.exitCode = 1;
