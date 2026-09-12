@@ -1,10 +1,10 @@
-# View Architecture V0.4
+# View Architecture V0.5
 
 ## Purpose
 
 A **View** is one representation of the shared MBSE Lite model. A view does not own engineering identity or become a second model: it references objects through the same stable IDs used in the authoritative Markdown.
 
-View Architecture V0.4 separates three concerns:
+View Architecture V0.5 separates three concerns:
 
 1. Markdown parsing produces the internal MBSE model.
 2. generation produces a renderer-neutral `model.json`, a navigation-oriented `viewer.json` and any view assets,
@@ -42,15 +42,27 @@ generated/<project>/
 
 Pinned browser dependencies are copied from Python package resources into `assets/vendor/`. The HTML loads them as classic sibling scripts, not through `fetch()`, dynamic imports or an import map. This avoids local ES-module origin restrictions that differ across browsers and keeps double-click `file://` use as the default workflow.
 
-`model.json` contains objects, relations, supporting tables, validation findings and summary counts. Each object includes its stable `id`, source file and MBSE/project-management area. `viewer.json` describes available views and grouped navigation. The garden-shed generator contributes both `floorplan.svg` and `model.glb`; both render under direct file opening through their separate text and binary embedding paths.
+`model.json` contains objects, relations, supporting tables, validation findings and summary counts. Each object includes its stable `id`, source file, source reference, attribute source references and MBSE/project-management area. Relations and supporting tables retain row/table references as well. These locators describe authoritative Markdown; `model.json` remains derived. `viewer.json` describes available views and grouped navigation. The garden-shed generator contributes both `floorplan.svg` and `model.glb`; both render under direct file opening through their separate text and binary embedding paths.
+
+## Browser data provider and bootstrap
+
+The generated browser application constructs an `EmbeddedDataProvider` from the manifest, model, text assets, binary assets and localized asset errors embedded in `index.html`. Its asynchronous `loadProject()` returns one project snapshot and declares these capabilities:
+
+```javascript
+{ read: true, write: false }
+```
+
+Viewer bootstrap awaits that snapshot and then builds the same renderer context used by V0.4. Renderers therefore remain unaware of whether project data came from an embedded file or, in a future mode, a local HTTP endpoint. The provider does not add a network dependency, so direct `file://` operation remains the static default. The existing viewer-owned `selectedObjectId` and all renderer selection callbacks are unchanged.
+
+`model.json` is only a generated snapshot. Neither the embedded provider nor any future provider may treat it as an editable source of truth. A future writable provider must send an application command to the backend, which updates Markdown through the validated command layer and returns a newly loaded snapshot.
 
 ## Viewer manifest schema
 
-The V0.4 schema remains deliberately small:
+The V0.5 schema remains deliberately small:
 
 ```json
 {
-  "schema_version": "0.4",
+  "schema_version": "0.5",
   "project": "garden_tool_shed",
   "default_view": "overview",
   "views": [
@@ -91,11 +103,11 @@ Generation rejects empty or duplicate view IDs, an undefined `default_view`, mis
 
 View IDs do not replace model-object IDs. A view called `architecture` may display `PART-012`, but `PART-012` remains the identity shared with every other representation.
 
-## V0.4 view types
+## V0.5 view types
 
 The asset-oriented contract covers at least these types:
 
-| Type | V0.4 behavior | Identity convention |
+| Type | V0.5 behavior | Identity convention |
 |---|---|---|
 | `mermaid` | Renders generated Mermaid from the local pinned browser asset and always exposes the source text. | Renderer receives the common selected object ID; highlighting is deferred. |
 | `graph` | Contract and selection-aware placeholder only; no graph library is included. | Graph nodes should use stable MBSE IDs. |
@@ -205,6 +217,9 @@ A visualization profile is a reserved Markdown table with this shape:
 |---|---|---|---|
 | garden_shed | enclosure | PART-001 | Part |
 | garden_shed | shelving | PART-012 | Part |
+| garden_shed | footprint | REQ-008 | Requirement |
+| garden_shed | mower_door_candidate | CON-007 | Concept |
+| garden_shed | main_door_candidate | CON-010 | Concept |
 ```
 
 The table is project-specific visualization metadata. It maps a generator's semantic role to an existing stable MBSE ID; it does not repeat the object's name, description, requirements or geometry and is not an alternative engineering model. Profile and role names use lower-case letters, digits and underscores. A referenced ID must exist and match `Expected Type`; a registered generator may additionally require a fixed role set and type for each role. Duplicate roles, missing IDs, incompatible types and missing required roles fail viewer generation and CLI validation clearly.
@@ -213,9 +228,23 @@ Projects without a recognized profile remain generic. In particular, `demo_proje
 
 ## Garden-shed shared conceptual visualization
 
-The garden-shed generator resolves its seven required part roles from `projects/garden_tool_shed/visualization.md`. Renaming a mapped object does not affect activation or role resolution because identity comes only from the mapped ID. Current preferred candidate annotations are derived generically from `Concept` objects whose status is `Preferred candidate`, without exact name matching.
+The garden-shed generator resolves seven required part roles, an explicit `footprint` Requirement role and the explicit Concept roles `mower_door_candidate` and `main_door_candidate` from `projects/garden_tool_shed/visualization.md`. Renaming a mapped object does not affect activation or role resolution because identity comes only from the mapped ID. Only the two mapped Concepts contribute displayed-candidate metadata; an unrelated Concept with the same status cannot change SVG or GLB metadata.
 
-Both SVG and GLB consume one small internal `GardenShedVisualizationSpec`; they do not maintain unrelated coordinate assumptions. The approximate footprint stated by the project requirement sets the envelope proportions. The current unresolved display defaults are: 2.2 m height, 0.06 m wall thickness, 0.08 m floor thickness, 1.85 m door height, 0.8 m ramp length, 22% of length for the mower zone and 11% for the shelving allocation. Door offsets, widths and other internal placements are normalized presentation choices.
+Both SVG and GLB consume one small internal `GardenShedVisualizationSpec`; they do not maintain unrelated coordinate assumptions. The authoritative engineering path is:
+
+```text
+REQ-008 structured Markdown attributes
+    ↓
+Decimal Quantity values with cell provenance
+    ↓
+GardenShedGeometrySpec.external_length / external_depth
+    ↓
+GardenShedVisualizationSpec
+    ↓
+SVG / simple GLB
+```
+
+Missing, malformed, non-positive or wrong-unit values fail validation; the generator does not search requirement prose or substitute a default engineering footprint. Changing the Requirement prose without changing its structured dimensions cannot change geometry. The current unresolved display defaults are: 2.2 m height, 0.06 m wall thickness, 0.08 m floor thickness, 1.85 m door height, 0.8 m ramp length, 22% of length for the mower zone and 11% for the shelving allocation. Door offsets, widths and other internal placements are normalized presentation choices and remain outside `GardenShedGeometrySpec`.
 
 Those values are visualization state only. They are neither written back to Markdown nor authoritative engineering dimensions. The generator records them and the displayed preferred candidate IDs in view config. Both views identify themselves as conceptual and not construction-ready.
 
@@ -223,7 +252,7 @@ The deterministic GLB writer has no added Python dependency. It writes glTF 2.0 
 
 ## Intentionally deferred
 
-V0.4 does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed CAD, construction geometry or parametric modeling. The intended future boundary is:
+V0.5 does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed CAD, construction geometry or parametric modeling. The intended future boundary is:
 
 ```text
 Markdown MBSE
@@ -239,4 +268,42 @@ SVG / GLB / STEP
 Web viewer
 ```
 
-CadQuery is not implemented in V0.4. A V0.5 geometry generator can replace or augment the simple box-based GLB writer without changing the viewer, stable-ID or shared-selection contracts.
+CadQuery is not implemented in V0.5. A future CAD generator can consume the typed geometry specification and replace or augment the simple box-based GLB writer without changing the viewer, stable-ID or shared-selection contracts.
+
+## Future local serve-mode contract
+
+The intended future command is:
+
+```powershell
+mbse-lite serve ../projects/garden_tool_shed
+```
+
+It will start a local MBSE Lite web application backed by that authoritative Markdown project. The intended write flow is:
+
+```text
+Browser
+    ↓ command
+local backend
+    ↓
+validated command layer
+    ↓
+Markdown
+    ↓
+reload model
+    ↓
+validation
+    ↓
+refreshed project snapshot
+```
+
+The framework remains deliberately unspecified and replaceable; V0.5 does not select Flask, FastAPI, Django or another server stack.
+
+```text
+STATIC MODE                          FUTURE EDITABLE MODE
+mbse-lite view                       mbse-lite serve
+file://                              http://127.0.0.1:...
+EmbeddedDataProvider                 future HttpDataProvider
+read-only                            read/write through commands
+```
+
+Both modes operate on the same authoritative Markdown project. Generated `model.json`, viewer state and visualization assets never become alternative write targets.

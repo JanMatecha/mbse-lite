@@ -342,16 +342,37 @@ window.mbseMermaidReady = Promise.resolve().then(() => {
   </aside>
 </div>
 <script>
-const viewerManifest = __MANIFEST_JSON__;
-const viewerModel = __MODEL_JSON__;
+const embeddedViewerManifest = __MANIFEST_JSON__;
+const embeddedViewerModel = __MODEL_JSON__;
 const embeddedViewAssets = __ASSETS_JSON__;
 const embeddedBinaryViewAssets = __BINARY_ASSETS_JSON__;
 const viewAssetErrors = __ASSET_ERRORS_JSON__;
 
-const objects = viewerModel.objects;
-const relations = viewerModel.relations;
-const supportingTables = viewerModel.tables;
-const findings = viewerModel.validation;
+class EmbeddedDataProvider {
+  constructor(snapshot) {
+    this.snapshot = snapshot;
+    this.capabilities = Object.freeze({ read: true, write: false });
+  }
+
+  async loadProject() {
+    return { ...this.snapshot, capabilities: this.capabilities };
+  }
+}
+
+const embeddedDataProvider = new EmbeddedDataProvider({
+  manifest: embeddedViewerManifest,
+  model: embeddedViewerModel,
+  assets: embeddedViewAssets,
+  binaryAssets: embeddedBinaryViewAssets,
+  assetErrors: viewAssetErrors
+});
+
+let viewerManifest = null;
+let viewerModel = null;
+let objects = [];
+let relations = [];
+let supportingTables = [];
+let findings = [];
 
 const escapeHtml = (value) => String(value ?? '')
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -1060,15 +1081,7 @@ const rendererFactories = {
   gltf: gltfRenderer
 };
 
-const viewerContext = {
-  model: viewerModel,
-  manifest: viewerManifest,
-  assets: embeddedViewAssets,
-  binaryAssets: embeddedBinaryViewAssets,
-  assetErrors: viewAssetErrors,
-  setSelectedObject,
-  getSelectedObjectId: () => selectedObjectId
-};
+let viewerContext = null;
 
 function activateView(viewId) {
   const view = viewerManifest.views.find(item => item.id === viewId);
@@ -1123,20 +1136,47 @@ function registerRenderer(type, factory) {
   if (activeView?.type === type) activateView(activeViewId);
 }
 
-window.mbseViewer = {
-  getSelectedObjectId: () => selectedObjectId,
-  setSelectedObject,
-  registerRenderer,
-  activateView,
-  model: viewerModel,
-  manifest: viewerManifest
-};
+async function bootstrapViewer() {
+  const snapshot = await embeddedDataProvider.loadProject();
+  viewerManifest = snapshot.manifest;
+  viewerModel = snapshot.model;
+  objects = viewerModel.objects;
+  relations = viewerModel.relations;
+  supportingTables = viewerModel.tables;
+  findings = viewerModel.validation;
+  viewerContext = {
+    model: viewerModel,
+    manifest: viewerManifest,
+    assets: snapshot.assets,
+    binaryAssets: snapshot.binaryAssets,
+    assetErrors: snapshot.assetErrors,
+    capabilities: snapshot.capabilities,
+    setSelectedObject,
+    getSelectedObjectId: () => selectedObjectId
+  };
 
-document.getElementById('modelCounts').textContent = `${viewerModel.summary.objects} objects · ${viewerModel.summary.relations} relations`;
-renderNavigation();
-renderSelectedObject();
-if (viewerManifest.default_view) activateView(viewerManifest.default_view);
-else document.getElementById('viewContent').innerHTML = '<div class="card muted">This viewer manifest contains no views.</div>';
+  window.mbseViewer = {
+    getSelectedObjectId: () => selectedObjectId,
+    setSelectedObject,
+    registerRenderer,
+    activateView,
+    provider: embeddedDataProvider,
+    capabilities: snapshot.capabilities,
+    model: viewerModel,
+    manifest: viewerManifest
+  };
+
+  document.getElementById('modelCounts').textContent = `${viewerModel.summary.objects} objects · ${viewerModel.summary.relations} relations`;
+  renderNavigation();
+  renderSelectedObject();
+  if (viewerManifest.default_view) activateView(viewerManifest.default_view);
+  else document.getElementById('viewContent').innerHTML = '<div class="card muted">This viewer manifest contains no views.</div>';
+}
+
+bootstrapViewer().catch(error => {
+  console.error('The embedded project snapshot could not be loaded.', error);
+  document.getElementById('viewContent').innerHTML = '<div class="card muted">The embedded project snapshot could not be loaded.</div>';
+});
 </script>
 </body>
 </html>

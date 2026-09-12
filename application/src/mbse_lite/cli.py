@@ -12,6 +12,7 @@ from .core import (
     load_model,
     validate_model,
 )
+from .editing import EditingError, UpdateObjectAttribute, update_object_attribute
 from .viewer import export_viewer
 from .visualization import validate_visualizations
 
@@ -60,6 +61,25 @@ def build_parser() -> argparse.ArgumentParser:
     xlsx_import.add_argument("input", type=Path)
     xlsx_import.add_argument("output_dir", type=Path)
 
+    update = sub.add_parser(
+        "update-attribute",
+        help="Safely update one existing object attribute in authoritative Markdown",
+    )
+    _add_project_argument(update)
+    update.add_argument("object_id", help="Stable object ID, for example PART-012")
+    update.add_argument("attribute", help="Existing Markdown table column name")
+    update.add_argument("value", help="New attribute value")
+    update.add_argument(
+        "--expect",
+        default=None,
+        help="Reject the update unless the current value exactly matches this value",
+    )
+    update.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Resolve and validate the update without modifying Markdown",
+    )
+
     return parser
 
 
@@ -71,6 +91,34 @@ def main() -> int:
         for path in written:
             print(f"Written: {path}")
         print("Review the imported Markdown before replacing source-of-truth project files.")
+        return 0
+
+    if args.command == "update-attribute":
+        try:
+            result = update_object_attribute(
+                args.project,
+                UpdateObjectAttribute(
+                    object_id=args.object_id,
+                    attribute=args.attribute,
+                    new_value=args.value,
+                    expected_old_value=args.expect,
+                    dry_run=args.dry_run,
+                ),
+            )
+        except EditingError as error:
+            print(f"ERROR: {error}")
+            return 1
+        print(f"Object: {result.object_id}")
+        print(f"Attribute: {result.attribute}")
+        print(f"Old value: {result.old_value}")
+        print(f"New value: {result.new_value}")
+        print(f"Markdown file: {result.source_file}")
+        if result.dry_run:
+            print("Dry run: validation passed; no files modified")
+        elif result.changed:
+            print("Updated: validation passed")
+        else:
+            print("No change: validation passed")
         return 0
 
     model = load_model(args.project)

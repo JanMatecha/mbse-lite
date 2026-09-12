@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 import math
-import re
 import struct
 from dataclasses import dataclass
 from html import escape
 from typing import Mapping
 
 from ..core import Model, ModelObject
+from ..geometry import GardenShedGeometrySpec, parse_positive_quantity
 from ..view_architecture import ViewDefinition
 from ._types import GeneratedViews
 from .profile import resolve_visualization_profile
@@ -23,23 +23,25 @@ GARDEN_SHED_REQUIRED_ROLES = {
     "mower_door": "Part",
     "mower_ramp": "Part",
     "shelving": "Part",
+    "footprint": "Requirement",
+    "mower_door_candidate": "Concept",
+    "main_door_candidate": "Concept",
 }
 
-_FOOTPRINT_PATTERN = re.compile(
-    r"approximately\s+(\d+(?:\.\d+)?)\s*m\s*(?:×|x|by)\s*(\d+(?:\.\d+)?)\s*m",
-    re.IGNORECASE,
+GARDEN_SHED_CANDIDATE_ROLES = (
+    "mower_door_candidate",
+    "main_door_candidate",
 )
 
 
 @dataclass(frozen=True, slots=True)
 class GardenShedVisualizationSpec:
-    """Small, non-authoritative layout basis shared by the SVG and GLB views."""
+    """Shared engineering inputs and presentation defaults for SVG and GLB."""
 
     roles: Mapping[str, ModelObject]
-    length: float
-    depth: float
+    geometry: GardenShedGeometrySpec
     footprint_note: str
-    preferred_candidate_ids: tuple[str, ...]
+    displayed_candidate_ids: tuple[str, ...]
     candidate_note: str
     mower_fraction: float = 0.22
     shelving_fraction: float = 0.11
@@ -54,6 +56,14 @@ class GardenShedVisualizationSpec:
     shelving_height: float = 1.55
     ramp_length: float = 0.8
 
+    @property
+    def length(self) -> float:
+        return float(self.geometry.external_length.value)
+
+    @property
+    def depth(self) -> float:
+        return float(self.geometry.external_depth.value)
+
 
 @dataclass(frozen=True, slots=True)
 class _Box:
@@ -64,61 +74,54 @@ class _Box:
     rotation: tuple[float, float, float, float] | None = None
 
 
-def _preferred_candidate_ids(model: Model) -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            obj.id
-            for obj in model.objects.values()
-            if obj.type == "Concept"
-            and obj.attributes.get("Status", "").strip().casefold()
-            == "preferred candidate"
-        )
+def build_garden_shed_geometry_spec(
+    roles: Mapping[str, ModelObject],
+) -> GardenShedGeometrySpec:
+    """Resolve authoritative footprint inputs from the explicitly mapped source."""
+
+    source = roles["footprint"]
+    return GardenShedGeometrySpec(
+        source_object_id=source.id,
+        external_length=parse_positive_quantity(
+            source,
+            "Target Length",
+            expected_unit="m",
+            expected_object_type="Requirement",
+        ),
+        external_depth=parse_positive_quantity(
+            source,
+            "Target Depth",
+            expected_unit="m",
+            expected_object_type="Requirement",
+        ),
     )
 
 
-def _approximate_footprint(model: Model) -> tuple[float, float, str, str, str] | None:
-    for obj in model.objects.values():
-        if obj.type != "Requirement":
-            continue
-        text = " ".join(obj.attributes.values())
-        match = _FOOTPRINT_PATTERN.search(text)
-        if match is None:
-            continue
-        length, depth = (float(value) for value in match.groups())
-        if length > 0 and depth > 0:
-            return length, depth, obj.id, match.group(1), match.group(2)
-    return None
+def _visualization_spec(roles: Mapping[str, ModelObject]) -> GardenShedVisualizationSpec:
+    geometry = build_garden_shed_geometry_spec(roles)
+    length = geometry.external_length
+    depth = geometry.external_depth
+    footprint_note = (
+        f"Envelope aspect ratio uses approximate project target {length.value} {length.unit} × "
+        f"{depth.value} {depth.unit} from {geometry.source_object_id}."
+    )
 
-
-def _visualization_spec(
-    model: Model, roles: Mapping[str, ModelObject]
-) -> GardenShedVisualizationSpec:
-    footprint = _approximate_footprint(model)
-    if footprint is None:
-        length, depth = 3.0, 1.0
-        footprint_note = "Envelope aspect ratio uses a visualization-only 3:1 default."
-    else:
-        length, depth, footprint_id, length_text, depth_text = footprint
-        footprint_note = (
-            f"Envelope aspect ratio uses approximate project target {length_text} m × "
-            f"{depth_text} m from {footprint_id}."
-        )
-
-    preferred_candidate_ids = _preferred_candidate_ids(model)
-    if preferred_candidate_ids:
+    displayed_candidate_ids = tuple(
+        roles[role].id for role in GARDEN_SHED_CANDIDATE_ROLES
+    )
+    if displayed_candidate_ids:
         candidate_note = (
-            f"Preferred candidates shown: {', '.join(preferred_candidate_ids)}; positions are not "
-            "accepted decisions."
+            "Geometry candidates mapped by the visualization profile: "
+            f"{', '.join(displayed_candidate_ids)}; positions are not accepted decisions."
         )
     else:
         candidate_note = "Door positions are neutral visualization-only placeholders."
 
     return GardenShedVisualizationSpec(
         roles=roles,
-        length=length,
-        depth=depth,
+        geometry=geometry,
         footprint_note=footprint_note,
-        preferred_candidate_ids=preferred_candidate_ids,
+        displayed_candidate_ids=displayed_candidate_ids,
         candidate_note=candidate_note,
     )
 
@@ -558,7 +561,7 @@ def generate_garden_shed_views(model: Model) -> GeneratedViews | None:
     )
     if roles is None:
         return None
-    spec = _visualization_spec(model, roles)
+    spec = _visualization_spec(roles)
     visualization_defaults = {
         "height_m": spec.conceptual_height,
         "wall_thickness_m": spec.wall_thickness,
@@ -583,7 +586,7 @@ def generate_garden_shed_views(model: Model) -> GeneratedViews | None:
                 config={
                     "geometry_status": "conceptual",
                     "not_to_scale_where_tbd": True,
-                    "displayed_candidates": list(spec.preferred_candidate_ids),
+                    "displayed_candidates": list(spec.displayed_candidate_ids),
                 },
             ),
             ViewDefinition(
@@ -599,7 +602,7 @@ def generate_garden_shed_views(model: Model) -> GeneratedViews | None:
                 config={
                     "geometry_status": "conceptual",
                     "not_construction_ready": True,
-                    "displayed_candidates": list(spec.preferred_candidate_ids),
+                    "displayed_candidates": list(spec.displayed_candidate_ids),
                     "visualization_defaults": visualization_defaults,
                 },
             ),

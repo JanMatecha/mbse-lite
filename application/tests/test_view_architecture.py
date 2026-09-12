@@ -2,18 +2,21 @@ import base64
 import copy
 import json
 import struct
+from dataclasses import fields
 from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
 
 from mbse_lite.core import Model, ModelObject, load_model
+from mbse_lite.geometry import GardenShedGeometrySpec
 from mbse_lite.browser_assets import MERMAID_VERSION, THREE_VERSION
 from mbse_lite.view_architecture import (
     MBSE_AREA,
     PROJECT_MANAGEMENT_AREA,
     SUPPORTED_VIEW_TYPES,
     ViewDefinition,
+    build_viewer_model,
     build_viewer_manifest,
 )
 from mbse_lite.viewer import export_viewer
@@ -22,7 +25,10 @@ from mbse_lite.visualization import (
     load_visualization_profiles,
     validate_visualizations,
 )
-from mbse_lite.visualization.garden_shed import GARDEN_SHED_REQUIRED_ROLES
+from mbse_lite.visualization.garden_shed import (
+    GARDEN_SHED_REQUIRED_ROLES,
+    build_garden_shed_geometry_spec,
+)
 
 
 def demo_project() -> Path:
@@ -46,7 +52,7 @@ def glb_json(glb: bytes) -> dict[str, object]:
 def test_default_manifest_defines_grouped_navigation_and_asset_views():
     manifest = build_viewer_manifest("demo_project")
 
-    assert manifest["schema_version"] == "0.4"
+    assert manifest["schema_version"] == "0.5"
     assert manifest["project"] == "demo_project"
     assert manifest["default_view"] == "overview"
     assert [view["id"] for view in manifest["views"]] == [
@@ -90,6 +96,37 @@ def test_viewer_bundle_contains_manifest_model_and_meaningful_view_assets(tmp_pa
     assert "onSelectionChanged" in html
 
 
+def test_static_viewer_bootstraps_through_read_only_embedded_provider(tmp_path):
+    output = tmp_path / "index.html"
+
+    export_viewer(load_model(demo_project()), output, project_name="Demo Project")
+
+    html = output.read_text(encoding="utf-8")
+    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+    assert "class EmbeddedDataProvider" in html
+    assert "this.capabilities = Object.freeze({ read: true, write: false });" in html
+    assert "async loadProject()" in html
+    assert "const snapshot = await embeddedDataProvider.loadProject();" in html
+    assert "manifest: embeddedViewerManifest" in html
+    assert "model: embeddedViewerModel" in html
+    assert "assets: embeddedViewAssets" in html
+    assert "binaryAssets: embeddedBinaryViewAssets" in html
+    assert "assetErrors: viewAssetErrors" in html
+    assert "provider: embeddedDataProvider" in html
+    assert "capabilities: snapshot.capabilities" in html
+    assert "let selectedObjectId = null" in html
+    assert "MBSE Lite · local read-only viewer" in html
+    assert "class HttpDataProvider" not in html
+    assert "fetch(" not in html
+    assert "cdn.jsdelivr.net" not in html
+    assert all(
+        dependency not in pyproject.casefold()
+        for dependency in ("flask", "fastapi", "django", "httpx", "requests")
+    )
+
+
 def test_viewer_bundle_contains_pinned_offline_browser_dependencies(tmp_path):
     output = tmp_path / "index.html"
 
@@ -128,9 +165,118 @@ def test_garden_shed_visualization_profile_resolves_required_roles_by_id():
         "PART-010",
         "PART-011",
         "PART-012",
+        "REQ-008",
+        "CON-007",
+        "CON-010",
     }
-    assert all(mapping.expected_type == "Part" for mapping in profile.roles.values())
+    assert profile.roles["footprint"].expected_type == "Requirement"
+    assert profile.roles["mower_door_candidate"].expected_type == "Concept"
+    assert profile.roles["main_door_candidate"].expected_type == "Concept"
+    assert all(
+        mapping.expected_type == "Part"
+        for role, mapping in profile.roles.items()
+        if role
+        not in {"footprint", "mower_door_candidate", "main_door_candidate"}
+    )
     assert validate_visualizations(model) == []
+
+
+def test_garden_shed_geometry_uses_typed_structured_requirement_values():
+    model = load_model(garden_shed_project())
+    profile = load_visualization_profiles(model)["garden_shed"]
+    roles = {role: model.objects[mapping.object_id] for role, mapping in profile.roles.items()}
+
+    geometry = build_garden_shed_geometry_spec(roles)
+
+    assert isinstance(geometry, GardenShedGeometrySpec)
+    assert geometry.source_object_id == "REQ-008"
+    assert str(geometry.external_length.value) == "4.0"
+    assert str(geometry.external_depth.value) == "1.2"
+    assert geometry.external_length.unit == "m"
+    assert geometry.external_length.source.row_id == "REQ-008"
+    assert geometry.external_length.source.column == "Target Length [m]"
+    assert {field.name for field in fields(geometry)} == {
+        "source_object_id",
+        "external_length",
+        "external_depth",
+    }
+
+
+def test_requirement_prose_does_not_drive_garden_shed_geometry():
+    model = load_model(garden_shed_project())
+    original = build_generated_views(model)
+    model.objects["REQ-008"].attributes["Requirement"] = (
+        "Changed prose mentioning approximately 99 m × 88 m must not drive geometry."
+    )
+
+    changed = build_generated_views(model)
+
+    assert changed.assets["views/floorplan.svg"] == original.assets["views/floorplan.svg"]
+    assert changed.assets["views/model.glb"] == original.assets["views/model.glb"]
+
+
+def test_unrelated_preferred_concept_does_not_change_displayed_candidates():
+    model = load_model(garden_shed_project())
+    model.objects["CON-999"] = ModelObject(
+        id="CON-999",
+        type="Concept",
+        attributes={"Name": "Unrelated", "Status": "Preferred candidate"},
+    )
+
+    generated = build_generated_views(model)
+
+    assert {
+        view.id: view.config["displayed_candidates"] for view in generated.views
+    } == {
+        "floor-plan": ["CON-007", "CON-010"],
+        "conceptual-3d": ["CON-007", "CON-010"],
+    }
+    assert "CON-999" not in generated.assets["views/floorplan.svg"]
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("Target Length [m]", "", "is required"),
+        ("Target Length [m]", "four", "not a valid number"),
+        ("Target Length [m]", "0", "must be positive"),
+    ],
+)
+def test_invalid_structured_footprint_values_fail_validation(column, value, message):
+    model = copy.deepcopy(load_model(garden_shed_project()))
+    model.objects["REQ-008"].attributes[column] = value
+
+    findings = validate_visualizations(model)
+
+    assert findings[0][0] == "ERROR"
+    assert message in findings[0][1]
+
+
+def test_wrong_structured_footprint_unit_fails_validation():
+    model = copy.deepcopy(load_model(garden_shed_project()))
+    requirement = model.objects["REQ-008"]
+    value = requirement.attributes.pop("Target Length [m]")
+    source = requirement.attribute_sources.pop("Target Length [m]")
+    requirement.attributes["Target Length [cm]"] = value
+    requirement.attribute_sources["Target Length [cm]"] = source.for_column(
+        "Target Length [cm]"
+    )
+
+    findings = validate_visualizations(model)
+
+    assert findings[0][0] == "ERROR"
+    assert "uses unit 'cm'; expected 'm'" in findings[0][1]
+
+
+def test_viewer_model_exposes_source_provenance_without_replacing_source_file():
+    model = load_model(garden_shed_project())
+
+    generated = build_viewer_model(model)
+    requirement = next(item for item in generated["objects"] if item["id"] == "REQ-008")
+
+    assert requirement["source_file"] == "mbse/02_requirements.md"
+    assert requirement["source_ref"]["row_id"] == "REQ-008"
+    assert requirement["attribute_sources"]["Target Length [m]"]["column"] == "Target Length [m]"
 
 
 def test_garden_shed_generation_does_not_depend_on_mapped_object_names():
@@ -232,7 +378,7 @@ def test_garden_shed_bundle_contains_interactive_floor_plan_with_model_ids(tmp_p
     assert mapped_ids <= set(model.objects)
     assert "4.0 m × 1.2 m from REQ-008" in svg_text
     assert "visualization-only" in svg_text
-    assert "Preferred candidates shown: CON-007, CON-010" in svg_text
+    assert "Geometry candidates mapped by the visualization profile: CON-007, CON-010" in svg_text
 
 
 def test_garden_shed_registry_emits_binary_glb_with_stable_model_ids():

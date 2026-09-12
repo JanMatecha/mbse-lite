@@ -5,6 +5,7 @@ from ._types import GeneratedViews
 from .garden_shed import (
     GARDEN_SHED_PROFILE,
     GARDEN_SHED_REQUIRED_ROLES,
+    build_garden_shed_geometry_spec,
     generate_garden_shed_views,
 )
 from .profile import (
@@ -41,9 +42,11 @@ def validate_visualizations(model: Model) -> list[tuple[str, str]]:
     if GARDEN_SHED_PROFILE not in profiles:
         return []
     try:
-        resolve_visualization_profile(
+        roles = resolve_visualization_profile(
             model, GARDEN_SHED_PROFILE, GARDEN_SHED_REQUIRED_ROLES
         )
+        if roles is not None:
+            build_garden_shed_geometry_spec(roles)
     except ValueError as error:
         return [("ERROR", str(error))]
     return []

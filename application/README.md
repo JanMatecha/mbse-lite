@@ -9,6 +9,7 @@ The application reads Markdown-based project models, validates IDs and relations
 Current POC capabilities:
 
 - parse Markdown tables,
+- retain table, row, object, relation and per-attribute source provenance,
 - build an internal object/relation model,
 - validate IDs and traceability,
 - generate Mermaid traceability views,
@@ -17,7 +18,9 @@ Current POC capabilities:
 - generate interactive, selection-synchronized SVG engineering views when a domain generator matches the model,
 - generate and render conceptual GLB engineering views with selection synchronized through the same stable model IDs,
 - export LibreOffice-compatible XLSX,
-- import XLSX into a reviewable Markdown directory.
+- import XLSX into a reviewable Markdown directory,
+- safely update one existing Markdown object attribute with optimistic concurrency and validation,
+- parse explicitly sourced structured geometry quantities with deterministic decimal values.
 
 ## Development setup
 
@@ -41,6 +44,15 @@ uv run mbse-lite export-mermaid ../projects/demo_project ../generated/demo_trace
 uv run mbse-lite export-html ../projects/demo_project ../generated/demo_index.html
 uv run mbse-lite export-xlsx ../projects/demo_project ../generated/demo_model.xlsx
 ```
+
+Safely preview or apply one existing attribute update:
+
+```bash
+uv run mbse-lite update-attribute ../projects/demo_project PART-001 Description "Revised description" --expect "Current description" --dry-run
+uv run mbse-lite update-attribute ../projects/demo_project PART-001 Description "Revised description" --expect "Current description"
+```
+
+The command resolves the exact Markdown cell from parser provenance, re-locates the row by stable ID, validates a temporary candidate project, and commits atomically. `--expect` rejects stale values and `--dry-run` never changes a file. Generic updates cannot change the `ID` column.
 
 ## Local web viewer
 
@@ -90,13 +102,25 @@ uv run mbse-lite view ../projects/garden_tool_shed --output ../generated/garden_
 
 The viewer is read-only. Markdown remains the source of truth; every file in the viewer bundle is derived and disposable. No continuously running Python server or database is required. Navigation comes from `viewer.json`, while `model.json` carries the renderer-neutral objects, relations, supporting tables and validation results. Text view assets, including sanitized SVG, are embedded in the HTML. GLB assets used by `gltf` views are embedded separately as base64 and reconstructed as an `ArrayBuffer`, so direct `file://` use does not fetch the sibling binary file.
 
+Browser startup goes through a read-only `EmbeddedDataProvider` with `{read: true, write: false}` capabilities. It supplies the embedded manifest, model snapshot, text assets, binary assets and asset errors to the unchanged renderer context. This boundary is designed for a future HTTP provider without introducing a server or network dependency into static mode. Generated `model.json` is a snapshot and must never be edited as a source of truth.
+
+## Future editable serve mode
+
+V0.5 documents but does not implement the future command:
+
+```bash
+mbse-lite serve ../projects/garden_tool_shed
+```
+
+That mode will run on local HTTP, load snapshots through a future `HttpDataProvider`, and route every write through the validated application command layer to Markdown before reloading and validating the project. The server framework remains unspecified and replaceable. Static `mbse-lite view` remains `file://`, embedded and read-only; both modes use the same authoritative Markdown project.
+
 SVG elements use `data-mbse-id`; glTF nodes use `extras.mbse_id`. Clicking either interactive representation selects the same object used by the list and detail panel, while selecting elsewhere highlights the matching representation when that view is active. A 5-pixel movement threshold distinguishes selection clicks from orbit drags.
 
 Core browser dependencies are local and pinned: Three.js `0.180.0` (including bundled `GLTFLoader` and `OrbitControls`) and Mermaid `11.17.2`. Generation copies classic-script builds from Python package resources to `assets/vendor/`; classic scripts avoid local ES-module imports that some browsers reject under `file://`. If a local dependency is missing or a view asset is malformed, that view shows a localized message while unrelated views remain usable.
 
-The garden-shed project opts into its generator through `projects/garden_tool_shed/visualization.md`. Its reserved Markdown table maps `Visualization Profile` + `Role` to an existing `Object ID` and `Expected Type`. The mapping supplies visualization semantics only; it neither duplicates nor changes the engineering definition. Missing objects, wrong types and missing generator-required roles fail validation clearly. A project without the `garden_shed` profile does not activate those views.
+The garden-shed project opts into its generator through `projects/garden_tool_shed/visualization.md`. Its reserved Markdown table maps `Visualization Profile` + `Role` to an existing `Object ID` and `Expected Type`. In addition to the modeled parts and structured footprint source, the explicit `mower_door_candidate` and `main_door_candidate` roles select the only Concepts used in displayed-candidate metadata. The mapping supplies visualization semantics only; it neither duplicates nor changes the engineering definition. Missing objects, wrong types and missing generator-required roles fail validation clearly. A project without the `garden_shed` profile does not activate those views.
 
-The garden-shed floor plan and 3D model are conceptual. Its approximate project footprint sets the envelope proportions. The shared visualization-only layout spec uses a 2.2 m display height, 0.06 m wall thickness, 0.08 m floor thickness, 1.85 m display door height, 0.8 m ramp length, a 22% mower-zone split and an 11% shelving-length allocation where project geometry is unresolved. These values are presentation defaults, are not construction-ready, and are never written into project Markdown.
+The garden-shed floor plan and 3D model are conceptual. The `footprint` profile role maps to REQ-008, whose structured `Target Length [m]` and `Target Depth [m]` attributes become provenance-carrying `Quantity` values and then `GardenShedGeometrySpec.external_length` and `.external_depth`. `GardenShedVisualizationSpec` consumes that engineering spec. It separately owns the 2.2 m display height, 0.06 m wall thickness, 0.08 m floor thickness, 1.85 m display door height, 0.8 m ramp length, 22% mower-zone split and 11% shelving-length allocation where project geometry is unresolved. These presentation defaults remain outside the authoritative geometry spec, are not construction-ready and are never written into project Markdown.
 
 ## Updating offline viewer assets
 
@@ -110,7 +134,7 @@ npm run build
 
 `package-lock.json` pins the complete update toolchain, including esbuild `0.25.9`. Normal Python installation, testing and viewer generation do not require Node. Three.js and Mermaid are MIT-licensed; their license files are packaged and copied beside the browser assets. Dependency upgrades must retain upstream notices and recheck licenses, including Mermaid's bundled transitive code.
 
-See `docs/VIEW_ARCHITECTURE.md` for the V0.4 manifest schema, offline packaging, visualization-profile, SVG/glTF identity, binary transport, renderer lifecycle and object-selection contracts.
+See `docs/VIEW_ARCHITECTURE.md` for the V0.5 manifest schema, source provenance, offline packaging, visualization-profile, SVG/glTF identity, binary transport, renderer lifecycle and object-selection contracts.
 
 ## Documentation
 

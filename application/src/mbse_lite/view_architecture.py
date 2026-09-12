@@ -9,7 +9,7 @@ from typing import Mapping, Sequence
 from .core import Model, Relation, validate_model
 
 
-VIEW_SCHEMA_VERSION = "0.4"
+VIEW_SCHEMA_VERSION = "0.5"
 MBSE_AREA = "MBSE"
 PROJECT_MANAGEMENT_AREA = "Project Management"
 PM_RELATION_AREA = "Project Management / Cross-area"
@@ -108,7 +108,12 @@ def build_viewer_model(model: Model) -> dict[str, object]:
                 "name": obj.attributes.get("Name") or obj.attributes.get("Title") or obj.id,
                 "status": obj.attributes.get("Status", ""),
                 "source_file": obj.source_file,
+                "source_ref": obj.source_ref.to_dict() if obj.source_ref else None,
                 "attributes": obj.attributes,
+                "attribute_sources": {
+                    name: source.to_dict()
+                    for name, source in obj.attribute_sources.items()
+                },
             }
         )
 
@@ -127,6 +132,7 @@ def build_viewer_model(model: Model) -> dict[str, object]:
                 "relation": rel.relation,
                 "target": rel.target,
                 "source_file": rel.source_file,
+                "source_ref": rel.source_ref.to_dict() if rel.source_ref else None,
                 "area": area,
             }
         )
@@ -145,12 +151,18 @@ def build_viewer_model(model: Model) -> dict[str, object]:
         if "ID" in header_set or {"Source", "Relation", "Target"}.issubset(header_set):
             continue
         source_file = key.rsplit(":", 1)[0]
+        table_source = model.table_sources.get(key)
         supporting_tables.append(
             {
                 "source_file": source_file,
+                "source_ref": table_source.to_dict() if table_source else None,
                 "area": area_for_source(source_file),
                 "headers": headers,
                 "rows": [[row.get(header, "") for header in headers] for row in rows],
+                "row_sources": [
+                    source.to_dict()
+                    for source in model.table_row_sources.get(key, ())
+                ],
             }
         )
 

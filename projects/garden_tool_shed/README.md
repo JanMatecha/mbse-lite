@@ -60,6 +60,6 @@ Project management:
 
 Visualization metadata:
 
-- `visualization.md` — maps semantic visualization roles to existing stable MBSE IDs; it does not redefine engineering objects or make generated geometry authoritative.
+- `visualization.md` — maps semantic visualization roles, including the structured footprint source and two geometry-relevant candidate Concepts, to existing stable MBSE IDs; it does not redefine engineering objects or make generated geometry authoritative.
 
 The structure may be extended when the project needs additional dedicated files such as site data, calculations, drawings, BOM or construction planning.

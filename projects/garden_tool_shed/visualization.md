@@ -14,3 +14,6 @@ and generated coordinates and geometry remain non-authoritative.
 | garden_shed | mower_door | PART-010 | Part |
 | garden_shed | mower_ramp | PART-011 | Part |
 | garden_shed | shelving | PART-012 | Part |
+| garden_shed | footprint | REQ-008 | Requirement |
+| garden_shed | mower_door_candidate | CON-007 | Concept |
+| garden_shed | main_door_candidate | CON-010 | Concept |

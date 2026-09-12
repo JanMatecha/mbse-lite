@@ -158,6 +158,40 @@ def test_load_model_reads_nested_project_areas(tmp_path):
     assert model.relations[0].source_file == "project_management/03_relations.md"
 
 
+def test_load_model_preserves_generic_table_row_and_attribute_provenance(tmp_path):
+    source = tmp_path / "model.md"
+    source.write_text(
+        "# Model\n\n"
+        "| ID | Name | Description |\n"
+        "|---|---|---|\n"
+        "| PART-001 | Frame | Main frame |\n\n"
+        "| Source | Relation | Target |\n"
+        "|---|---|---|\n"
+        "| PART-001 | connects_to | PART-001 |\n",
+        encoding="utf-8",
+    )
+
+    model = load_model(tmp_path)
+
+    obj = model.objects["PART-001"]
+    assert obj.source_file == "model.md"
+    assert obj.source_ref is not None
+    assert obj.source_ref.table_index == 1
+    assert obj.source_ref.row_index == 1
+    assert obj.source_ref.row_id == "PART-001"
+    assert obj.source_ref.line == 5
+    assert obj.attribute_sources["Description"].column == "Description"
+    assert obj.attribute_sources["Description"].line == 5
+
+    relation = model.relations[0]
+    assert relation.source_ref is not None
+    assert relation.source_ref.table_index == 2
+    assert relation.source_ref.row_index == 1
+    assert relation.source_ref.line == 9
+    assert model.table_sources["model.md:1"].line == 3
+    assert model.table_row_sources["model.md:2"][0].line == 9
+
+
 def test_web_viewer_contains_model_and_separated_areas(tmp_path):
     model = load_model(demo_project())
     output = tmp_path / "viewer.html"

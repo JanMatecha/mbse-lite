@@ -79,6 +79,14 @@ Examples: `REQ-001`, `FUN-004`, `DEC-002`.
 
 IDs are unique across the whole project, including both `mbse/` and `project_management/`, and should not be reused after an object is deleted or deprecated.
 
+Stable IDs are not ordinary editable attributes. The generic update command will not change an ID because doing so requires a future graph-wide refactoring operation.
+
+## Structured engineering quantities
+
+When a numeric engineering value is intended to drive geometry or another generator, keep it in a dedicated object-table attribute instead of relying on prose extraction. Put the unit in the column header, for example `Target Length [m]`, and keep the cell value numeric, for example `4.0`. The parser retains the value as text for backward compatibility; the geometry layer converts it to a deterministic decimal `Quantity` only after validating that the value exists, is numeric, finite and positive and that its source object and unit match the generator contract.
+
+Human-readable requirement prose may refer to the structured dimensions without repeating their authoritative numbers. Unresolved geometry remains `TBD`. Visualization-only placeholders are ordinary renderer settings, not typed engineering quantities, and must never be written back as project facts.
+
 ## Relations
 
 Relations are stored explicitly in Markdown tables with the columns:
@@ -109,7 +117,7 @@ Relations may be split across files. A recommended convention is to keep enginee
 
 The vocabulary is deliberately small in the POC. New relation types should be added only when a real project needs them.
 
-## Validation rules in V0.1
+## Validation rules
 
 The tool checks at least:
 
@@ -119,6 +127,8 @@ The tool checks at least:
 4. every requirement has at least one outgoing `satisfied_by` relation,
 5. every requirement has at least one outgoing `verified_by` relation,
 6. every function has at least one outgoing `realized_by` relation.
+
+An activated geometry profile can add generator-specific structural checks. The garden-shed profile, for example, maps an explicit `footprint` role to a Requirement and requires positive decimal `Target Length [m]` and `Target Depth [m]` values. It does not search prose or substitute default engineering dimensions when these inputs are invalid.
 
 ID format, prefix, uniqueness and broken relation-reference findings are errors because they make the model structurally inconsistent. Missing semantic traceability from rules 3–6 is a warning because it can represent incomplete engineering work. Relation names are matched exactly; a different or generic relation does not satisfy these checks.
 
@@ -150,14 +160,13 @@ This lets the project answer separately:
 
 ## POC boundaries
 
-V0.1 intentionally excludes:
+The current POC intentionally excludes:
 
 - database/server storage,
-- concurrent-edit conflict handling,
 - graphical editing,
 - full SysML v2 parsing,
 - PLM/ALM integration,
 - automated simulation integration,
 - complex workflow/approval management.
 
-These should only be introduced after a real project demonstrates the need.
+The local `update-attribute` command provides optimistic stale-write detection and atomic validation as the foundation for a future editor; the browser remains read-only and no web backend is included.
