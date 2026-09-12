@@ -127,6 +127,8 @@ def _validated_completion(job: CadJob, result: Any) -> dict[str, object]:
         or step_component_ids != expected_components
         or glb_component_ids != expected_components
         or not set(expected_components).issubset(glb_node_names)
+        or len(glb_mbse_ids) != len(expected_components)
+        or set(glb_mbse_ids) != set(expected_components)
     ):
         raise CadExportError("CAD backend returned invalid stable-identity evidence")
 

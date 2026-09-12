@@ -250,9 +250,9 @@ Those values are visualization state only. They are neither written back to Mark
 
 The deterministic GLB writer has no added Python dependency. It writes glTF 2.0 box primitives, materials, transforms and node metadata into one binary asset. It is deliberately a conceptual exchange/view generator, not a CAD kernel.
 
-## Relationship to the optional V0.6 CAD backend
+## Relationship to the optional V0.7 CAD backend
 
-The V0.5 viewer still does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed construction geometry or parametric editing. V0.6 realizes the previously planned CAD boundary as a separate optional export path:
+The viewer still does not include an interactive graph library, two-way Mermaid synchronization, graphical editing, browser-to-Markdown writes, detailed construction geometry or parametric editing. V0.7 keeps the separate optional CAD export path:
 
 ```text
 Markdown MBSE
@@ -265,10 +265,12 @@ pure parent CAD runner
      ↓ isolated worker process
 optional CadQuery adapter
      ↓
+pure-Python GLB identity bridge
+     ↓
 footprint-only STEP + conceptual STEP/GLB + validated completion record
 ```
 
-`mbse-lite export-cad` consumes the same typed geometry and visualization-role mapping, but it does not change `mbse-lite view`. Its main process validates and serializes the job, while a disposable worker is the only process that imports CadQuery/OCP. The CadQuery GLB preserves stable PART IDs as node names in the tested exporter, but does not emit the viewer's stronger `extras.mbse_id` selection metadata. The deterministic custom viewer GLB therefore remains the default. See `CAD_ARCHITECTURE.md` for the optional dependency, process boundary, authority, unit and artifact contracts.
+`mbse-lite export-cad` consumes the same typed geometry and visualization-role mapping, but it does not change `mbse-lite view`. Its main process validates and serializes the job, while a disposable worker is the only process that imports CadQuery/OCP. CadQuery preserves stable PART IDs as node names; the bridge copies only the explicitly expected identities into `node.extras.mbse_id`, which GLTFLoader exposes as `Object3D.userData.mbse_id` for the existing selection contract. Node names remain useful but are not the authoritative browser identity. The deterministic custom viewer GLB remains the production default, and the CadQuery GLB remains millimetre-scaled pending a future integration decision. See `CAD_ARCHITECTURE.md` for the optional dependency, process boundary, authority, unit and artifact contracts.
 
 ## Future local serve-mode contract
 

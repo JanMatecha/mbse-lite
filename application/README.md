@@ -88,7 +88,7 @@ generated/garden_tool_shed/cad/
 
 `footprint.step` is a planar 4000 mm × 1200 mm CAD face sourced from the structured REQ-008 quantities. It has zero Z extent: no height or material thickness is inferred. The two conceptual previews reuse that footprint and the explicitly mapped PART identities, but all unresolved height, wall, floor, door, ramp, shelving and layout values come only from `GardenShedVisualizationSpec` and remain non-authoritative.
 
-CadQuery 2.8.0 preserves the seven direct assembly PART names through STEP re-import and as GLB node names in the tested export. Its GLB does not emit the current viewer's `extras.mbse_id` metadata, so `mbse-lite view` deliberately keeps its proven custom GLB generator and requires no CAD dependency. The parent accepts an export only after cross-checking the job-specific completion record, artifact sizes, manifest, footprint extent and identity evidence. See `docs/CAD_ARCHITECTURE.md` for the process, authority, unit, manifest and identity contracts.
+CadQuery 2.8.0 preserves the seven direct assembly PART names through STEP re-import and as GLB node names. A deterministic pure-Python bridge adds each explicit job identity as matching `node.extras.mbse_id`, then re-reads the GLB before success is recorded. The parent independently parses the artifact and rejects missing, conflicting or tampered name/extras evidence. `mbse-lite view` deliberately keeps its proven custom GLB generator and requires no CAD dependency; production integration is out of scope, and the CadQuery preview remains millimetre-scaled. See `docs/CAD_ARCHITECTURE.md` for the process, authority, unit, manifest and identity contracts.
 
 ## Local web viewer
 

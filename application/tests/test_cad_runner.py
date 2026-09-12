@@ -1,4 +1,5 @@
 import json
+import struct
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,25 @@ from mbse_lite.core import load_model
 
 def garden_shed_project() -> Path:
     return Path(__file__).resolve().parents[2] / "projects" / "garden_tool_shed"
+
+
+def _conceptual_glb(component_ids, *, omitted_extra=None):
+    nodes = [{"name": "conceptual-preview"}]
+    nodes.extend(
+        {
+            "name": object_id,
+            "extras": (
+                {} if object_id == omitted_extra else {"mbse_id": object_id}
+            ),
+        }
+        for object_id in component_ids
+    )
+    document = json.dumps(
+        {"asset": {"version": "2.0"}, "nodes": nodes}, separators=(",", ":")
+    ).encode("utf-8")
+    document += b" " * (-len(document) % 4)
+    length = 20 + len(document)
+    return struct.pack("<4sIII4s", b"glTF", 2, length, len(document), b"JSON") + document
 
 
 def _valid_manifest(request, backend, component_ids, glb_mbse_ids=()):
@@ -107,10 +127,12 @@ def _publish_valid_result(
         "version": "2.8.0",
         "internal_length_unit": "mm",
     }
-    manifest = _valid_manifest(request, backend, component_ids)
+    manifest = _valid_manifest(request, backend, component_ids, component_ids)
     (output_dir / "footprint.step").write_bytes(b"mock footprint STEP")
     (output_dir / "conceptual-preview.step").write_bytes(b"mock conceptual STEP")
-    (output_dir / "conceptual-preview.glb").write_bytes(b"mock conceptual GLB")
+    (output_dir / "conceptual-preview.glb").write_bytes(
+        _conceptual_glb(component_ids)
+    )
     (output_dir / "cad-manifest.json").write_text(
         json.dumps(manifest), encoding="utf-8"
     )
@@ -143,7 +165,7 @@ def _publish_valid_result(
         "step_component_ids": component_ids,
         "glb_node_names": ["conceptual-preview", *component_ids],
         "glb_component_ids": component_ids,
-        "glb_mbse_ids": [],
+        "glb_mbse_ids": component_ids,
     }
     (output_dir / "cad-job-result.json").write_text(
         json.dumps(completion), encoding="utf-8"
@@ -299,3 +321,32 @@ def test_stale_completion_record_cannot_satisfy_a_new_job(tmp_path, monkeypatch)
         export_project_cad(load_model(garden_shed_project()), output_dir)
 
     assert not (output_dir / "cad-job-result.json").exists()
+
+
+def test_parent_rejects_glb_tampering_even_when_manifest_claims_success(
+    tmp_path, monkeypatch
+):
+    def run(command, **kwargs):
+        completed = _publish_valid_result(command)
+        request = json.loads(Path(command[-1]).read_text(encoding="utf-8"))
+        output_dir = Path(request["output_dir"])
+        component_ids = [
+            request["visualization"]["roles"][role]["object_id"]
+            for role in CAD_COMPONENT_ROLES
+        ]
+        glb_path = output_dir / "conceptual-preview.glb"
+        glb_path.write_bytes(
+            _conceptual_glb(component_ids, omitted_extra=component_ids[0])
+        )
+        completion_path = output_dir / "cad-job-result.json"
+        completion = json.loads(completion_path.read_text(encoding="utf-8"))
+        for artifact in completion["artifacts"]:
+            if artifact["file"] == "conceptual-preview.glb":
+                artifact["size_bytes"] = glb_path.stat().st_size
+        completion_path.write_text(json.dumps(completion), encoding="utf-8")
+        return completed
+
+    monkeypatch.setattr(cad_runner.subprocess, "run", run)
+
+    with pytest.raises(CadWorkerError, match="actual GLB"):
+        export_project_cad(load_model(garden_shed_project()), tmp_path / "cad")

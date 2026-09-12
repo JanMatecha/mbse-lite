@@ -53,6 +53,7 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-047 | A nonzero CAD-worker exit shall fail except on Windows for the exact `0xC0000374` heap-corruption status after a fully valid completion record and artifacts, which may succeed with a warning only as a defensive fallback; `0xC0000005` shall always fail. | Implemented |
 | APP-REQ-048 | A future local serve mode shall route every CAD operation through the isolated parent runner and shall not import CadQuery/OCP into the server process. | Guiding |
 | APP-REQ-049 | After successful atomic completion publication and explicit stdout/stderr flushing, the isolated CAD worker shall terminate with `os._exit(0)` before CadQuery/OCP interpreter teardown; no failure path or parent/server process shall use that controlled success exit. | Implemented |
+| APP-REQ-050 | A CadQuery GLB conceptual preview shall map the CAD job's explicit stable component identities to matching `node.name` and `node.extras.mbse_id` values without changing geometry, and worker and parent validation shall reject incomplete, conflicting or artifact-inconsistent identity evidence. | Implemented |
 
 ## Rule for adding requirements
 

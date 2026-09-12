@@ -4,7 +4,6 @@ import importlib
 import json
 import math
 import os
-import struct
 import tempfile
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -15,6 +14,7 @@ from typing import Any
 
 from ..geometry import GardenShedGeometrySpec, Quantity
 from ..visualization.garden_shed import GardenShedVisualizationSpec
+from .glb_identity import enrich_glb_identities, inspect_glb_identity
 from .protocol import (
     CAD_ARTIFACT_FILENAMES,
     CAD_COMPONENT_ROLES,
@@ -314,59 +314,16 @@ def build_conceptual_preview(
     )
 
 
-def _glb_document(path: Path) -> dict[str, object]:
-    data = path.read_bytes()
-    if len(data) < 20:
-        raise CadExportError(f"CadQuery GLB is truncated: {path}")
-    magic, version, total_length = struct.unpack_from("<4sII", data)
-    if magic != b"glTF" or version != 2 or total_length != len(data):
-        raise CadExportError(f"CadQuery GLB has an invalid header: {path}")
-
-    offset = 12
-    document: dict[str, object] | None = None
-    while offset + 8 <= len(data):
-        chunk_length, chunk_type = struct.unpack_from("<I4s", data, offset)
-        chunk_start = offset + 8
-        chunk_end = chunk_start + chunk_length
-        if chunk_end > len(data):
-            raise CadExportError(f"CadQuery GLB has an invalid chunk length: {path}")
-        if chunk_type == b"JSON":
-            document = json.loads(data[chunk_start:chunk_end].rstrip(b" \x00"))
-            break
-        offset = chunk_end
-    if document is None:
-        raise CadExportError(f"CadQuery GLB has no JSON chunk: {path}")
-    return document
-
-
 def inspect_glb_node_names(path: Path) -> tuple[str, ...]:
     """Read stable-name evidence from a binary glTF JSON chunk."""
 
-    document = _glb_document(path)
-    nodes = document.get("nodes", [])
-    if not isinstance(nodes, list):
-        raise CadExportError(f"CadQuery GLB nodes are malformed: {path}")
-    return tuple(
-        name
-        for node in nodes
-        if isinstance(node, dict) and isinstance((name := node.get("name")), str)
-    )
+    return inspect_glb_identity(path).node_names
 
 
 def inspect_glb_mbse_ids(path: Path) -> tuple[str, ...]:
     """Read IDs using the existing viewer's ``node.extras.mbse_id`` contract."""
 
-    document = _glb_document(path)
-    nodes = document.get("nodes", [])
-    if not isinstance(nodes, list):
-        raise CadExportError(f"CadQuery GLB nodes are malformed: {path}")
-    return tuple(
-        object_id
-        for node in nodes
-        if isinstance(node, dict)
-        and isinstance(node.get("extras"), dict)
-        and isinstance((object_id := node["extras"].get("mbse_id")), str)
-    )
+    return inspect_glb_identity(path).mbse_ids
 
 
 def inspect_step_object_names(
@@ -530,6 +487,11 @@ def execute_cad_job(job: CadJob) -> BackendCadExportResult:
             if not path.is_file() or path.stat().st_size <= 0:
                 raise CadExportError(f"CadQuery did not create a non-empty {path.name}")
 
+        enrich_glb_identities(
+            conceptual_glb_path,
+            {object_id: object_id for object_id in preview.component_ids},
+        )
+
         imported_footprint = cq.importers.importStep(
             str(footprint_path), unit="MM"
         ).val()
@@ -555,6 +517,13 @@ def execute_cad_job(job: CadJob) -> BackendCadExportResult:
         if set(glb_ids) != set(preview.component_ids):
             raise CadExportError(
                 "GLB node names did not preserve every stable component ID"
+            )
+        if (
+            len(glb_mbse_ids) != len(preview.component_ids)
+            or set(glb_mbse_ids) != set(preview.component_ids)
+        ):
+            raise CadExportError(
+                "GLB extras did not preserve every stable component ID"
             )
         manifest = _manifest(
             cq, spec, footprint, preview, step_ids, glb_ids, glb_mbse_ids

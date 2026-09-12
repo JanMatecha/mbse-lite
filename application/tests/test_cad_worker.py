@@ -78,7 +78,7 @@ def _valid_backend_result(request: dict[str, object], *, create_all=True):
         step_component_ids=component_ids,
         glb_node_names=("conceptual-preview", *component_ids),
         glb_component_ids=component_ids,
-        glb_mbse_ids=(),
+        glb_mbse_ids=component_ids,
     )
 
 
@@ -190,6 +190,24 @@ def test_failed_semantic_check_never_publishes_or_exits_successfully(
         cad_worker.os,
         "_exit",
         lambda code: pytest.fail("failed checks must not invoke os._exit"),
+    )
+
+    assert cad_worker.main([str(request_path)]) == 1
+    assert not (Path(request["output_dir"]) / "cad-job-result.json").exists()
+
+
+def test_incomplete_glb_extras_evidence_never_publishes_success(
+    tmp_path, monkeypatch
+):
+    request_path, request = _request_path(tmp_path)
+    result = _valid_backend_result(request)
+    result.glb_mbse_ids = result.glb_mbse_ids[:-1]
+
+    monkeypatch.setattr(cadquery_backend, "execute_cad_job", lambda job: result)
+    monkeypatch.setattr(
+        cad_worker.os,
+        "_exit",
+        lambda code: pytest.fail("invalid identity must not invoke os._exit"),
     )
 
     assert cad_worker.main([str(request_path)]) == 1

@@ -191,13 +191,16 @@ def test_full_export_classifies_artifacts_and_records_identity_evidence(tmp_path
     )
     assert set(result.glb_component_ids) == EXPECTED_COMPONENT_IDS
     assert set(result.step_component_ids) == EXPECTED_COMPONENT_IDS
-    assert result.glb_mbse_ids == ()
+    assert set(result.glb_mbse_ids) == EXPECTED_COMPONENT_IDS
     assert manifest["stable_identity"]["glb"][
         "preserves_all_component_ids_as_node_names"
     ] is True
     assert manifest["stable_identity"]["glb"][
         "preserves_current_viewer_extras_mbse_id"
-    ] is False
+    ] is True
+    assert set(
+        manifest["stable_identity"]["glb"]["observed_extras_mbse_ids"]
+    ) == EXPECTED_COMPONENT_IDS
     assert manifest["stable_identity"]["step"]["observed_component_ids"] == list(
         result.step_component_ids
     )

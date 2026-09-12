@@ -16,6 +16,7 @@ from ..visualization import (
     resolve_visualization_profile,
     validate_visualizations,
 )
+from .glb_identity import inspect_glb_identity
 from .protocol import (
     CAD_ARTIFACT_FILENAMES,
     CAD_COMPONENT_ROLES,
@@ -229,9 +230,13 @@ def _validate_manifest(
         )
     if glb.get("observed_extras_mbse_ids") != list(glb_mbse_ids):
         raise CadWorkerError("CAD manifest GLB extras evidence differs from completion")
-    expected_extras = set(glb_mbse_ids) == set(component_ids)
-    if glb.get("preserves_current_viewer_extras_mbse_id") is not expected_extras:
-        raise CadWorkerError("CAD manifest GLB extras conclusion is inconsistent")
+    if glb.get("preserves_current_viewer_extras_mbse_id") is not True:
+        raise CadWorkerError("CAD manifest reports incomplete GLB extras identity")
+    if (
+        len(glb_mbse_ids) != len(component_ids)
+        or set(glb_mbse_ids) != set(component_ids)
+    ):
+        raise CadWorkerError("CAD manifest GLB extras identities are incomplete")
 
 
 def _validate_completion(
@@ -321,6 +326,39 @@ def _validate_completion(
         )
     if not set(expected_components).issubset(glb_node_names):
         raise CadWorkerError("CAD worker GLB node names omit stable component IDs")
+    if (
+        len(glb_mbse_ids) != len(expected_components)
+        or set(glb_mbse_ids) != set(expected_components)
+    ):
+        raise CadWorkerError(
+            "CAD worker did not preserve the exact GLB extras identities"
+        )
+
+    glb_path = output_dir / "conceptual-preview.glb"
+    try:
+        actual_glb = inspect_glb_identity(glb_path)
+    except CadExportError as error:
+        raise CadWorkerError(f"CAD worker published an invalid GLB: {error}") from error
+    actual_glb_ids = tuple(
+        object_id
+        for object_id in expected_components
+        if object_id in actual_glb.node_names
+    )
+    actual_component_names = tuple(
+        name for name in actual_glb.node_names if name in set(expected_components)
+    )
+    if (
+        actual_glb.node_names != glb_node_names
+        or actual_glb_ids != glb_ids
+        or actual_glb.mbse_ids != glb_mbse_ids
+        or len(actual_component_names) != len(expected_components)
+        or len(actual_glb.identity_pairs) != len(expected_components)
+        or set(actual_glb.identity_pairs)
+        != {(object_id, object_id) for object_id in expected_components}
+    ):
+        raise CadWorkerError(
+            "CAD worker GLB identity evidence differs from the actual GLB"
+        )
 
     manifest = _read_json(output_dir / "cad-manifest.json", "CAD manifest")
     _validate_manifest(
