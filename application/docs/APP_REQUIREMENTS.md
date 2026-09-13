@@ -41,7 +41,7 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-035 | A geometry generator shall resolve its engineering source through an explicit visualization-profile role and shall report missing, non-numeric, non-positive, wrongly typed or wrongly dimensioned inputs as validation errors. | Implemented |
 | APP-REQ-036 | Geometry-relevant concepts shall be selected through explicit visualization-profile roles rather than a global scan of similarly named or similarly staged Concepts. | Implemented |
 | APP-REQ-037 | The static viewer shall load its manifest, model, text assets, binary assets and asset errors through a read-only embedded data provider while preserving the existing renderer context and shared selection contract. | Implemented |
-| APP-REQ-038 | A future local serve mode shall use the same renderer architecture with a replaceable HTTP data provider and shall route writes through validated application commands to authoritative Markdown rather than editing generated JSON. | Guiding |
+| APP-REQ-038 | A local serve mode shall use the same renderer architecture with a replaceable HTTP data provider and shall route writes through validated application commands to authoritative Markdown rather than editing generated JSON. | Implemented |
 | APP-REQ-039 | CadQuery support shall remain an optional dependency loaded only by explicit CAD operations; all existing non-CAD commands and the static viewer shall remain usable without it. | Implemented |
 | APP-REQ-040 | The CadQuery adapter shall convert validated engineering Quantities centrally to millimetres and shall reject unsupported, non-finite or non-positive values before calling CadQuery. | Implemented |
 | APP-REQ-041 | The authoritative garden-shed CAD artifact shall represent only the structured external footprint as a zero-thickness planar shape and shall not infer an engineering height or material thickness. | Implemented |
@@ -57,6 +57,10 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-051 | The static viewer may explicitly consume an already completed CadQuery conceptual GLB only after dependency-free validation of completion, artifact, authority, scope, unit and `extras.mbse_id` evidence; the default custom GLB path shall remain unchanged and shall not import or invoke CadQuery/OCP. | Implemented |
 | APP-REQ-052 | The glTF renderer shall convert a validated CAD source unit of `mm` to metre-based viewer world units by applying metadata-derived scene-root scale `0.001` before bounds and camera framing, while preserving the source artifact and shared stable-ID selection contract. | Implemented |
 | APP-REQ-053 | Conceptual SVG, custom GLB and CadQuery preview generation shall share a left-to-right longitudinal placement convention and shall map the door/front side consistently before export without browser mirroring, camera compensation or stable-ID reassignment. | Implemented |
+| APP-REQ-054 | The local editable server shall bind only to loopback, constrain all writes to the startup project through stable object ID and attribute provenance, and reject arbitrary paths, oversized bodies, unsupported methods and cross-origin browser writes. | Implemented |
+| APP-REQ-055 | The HTTP project endpoint shall return the current generated viewer snapshot with read/write capabilities, while the static embedded provider shall remain read-only and fetch-free for direct `file://` use. | Implemented |
+| APP-REQ-056 | Browser attribute updates shall include the previously observed value, surface optimistic-concurrency conflicts distinctly, and replace browser state only with a refreshed server-authoritative snapshot. | Implemented |
+| APP-REQ-057 | Serve mode shall expose only provenance-backed scalar attributes as editable, keep stable IDs and object types read-only, and shall not create, delete or edit objects or relations. | Implemented |
 
 ## Rule for adding requirements
 

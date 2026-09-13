@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 from typing import Mapping, Sequence
 
 from .core import Model, Relation, validate_model
+from .editing import editable_attribute_names
 
 
 VIEW_SCHEMA_VERSION = "0.5"
@@ -110,6 +111,7 @@ def build_viewer_model(model: Model) -> dict[str, object]:
                 "source_file": obj.source_file,
                 "source_ref": obj.source_ref.to_dict() if obj.source_ref else None,
                 "attributes": obj.attributes,
+                "editable_attributes": list(editable_attribute_names(obj)),
                 "attribute_sources": {
                     name: source.to_dict()
                     for name, source in obj.attribute_sources.items()

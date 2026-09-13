@@ -292,15 +292,15 @@ footprint-only STEP + conceptual STEP/GLB + validated completion record
 
 `mbse-lite export-cad` consumes the same typed geometry and visualization-role mapping. Its main process validates and serializes the job, while a disposable worker is the only process that imports CadQuery/OCP. `mbse-lite view` may later consume those completed artifacts only when their directory is explicit. CadQuery preserves stable PART IDs as node names; the bridge copies only the explicitly expected identities into `node.extras.mbse_id`, which GLTFLoader exposes as `Object3D.userData.mbse_id` for the existing selection contract. Node names remain useful but are not the authoritative browser identity. The deterministic custom viewer GLB remains the default. See `CAD_ARCHITECTURE.md` for the optional dependency, process boundary, authority, unit and artifact contracts.
 
-## Future local serve-mode contract
+## V0.9 local editable serve mode
 
-The intended future command is:
+The implemented command is:
 
 ```powershell
 mbse-lite serve ../projects/garden_tool_shed
 ```
 
-It will start a local MBSE Lite web application backed by that authoritative Markdown project. The intended write flow is:
+It starts a local MBSE Lite web application at `http://127.0.0.1:8000/` by default, backed by the explicitly supplied authoritative Markdown project. `--port` changes the port, `--no-open` suppresses browser launch, and any `--host` value must resolve to a loopback address. The write flow is:
 
 ```text
 Browser
@@ -318,14 +318,39 @@ validation
 refreshed project snapshot
 ```
 
-The framework remains deliberately unspecified and replaceable; V0.5 does not select Flask, FastAPI, Django or another server stack. If serve mode later exposes CAD generation, its long-running process must call the existing pure parent CAD runner and must never import the worker-only CadQuery backend.
+The HTTP transport uses `ThreadingHTTPServer` from the Python standard library behind the narrow, transport-independent `ServeApplication` boundary. This keeps the implementation replaceable without adding a server runtime dependency. Endpoint handlers validate transport concerns and delegate domain work to the existing `UpdateObjectAttribute` command; they do not patch Markdown themselves. Serve mode does not expose CAD generation and does not import CadQuery/OCP.
 
 ```text
-STATIC MODE                          FUTURE EDITABLE MODE
+STATIC MODE                          EDITABLE MODE
 mbse-lite view                       mbse-lite serve
-file://                              http://127.0.0.1:...
-EmbeddedDataProvider                 future HttpDataProvider
+file://                              http://127.0.0.1:8000/
+EmbeddedDataProvider                 HttpDataProvider
 read-only                            read/write through commands
 ```
 
-Both modes operate on the same authoritative Markdown project. Generated `model.json`, viewer state and visualization assets never become alternative write targets.
+`GET /api/project` reloads Markdown and returns the current manifest, renderer-neutral model, view assets, asset errors and `{read: true, write: true}` capabilities. `POST /api/object-attribute` accepts exactly `object_id`, `attribute`, `value` and `expected_old_value`. It resolves the target from provenance, invokes the command layer, validates and atomically commits or rolls back, then returns the refreshed snapshot. Conflicts return HTTP 409 with expected and actual values; malformed requests, unknown objects and domain rejections use deterministic JSON errors without exposing tracebacks.
+
+The selected-object panel offers Save controls only for provenance-backed scalar attributes advertised by the snapshot. The stable ID, type and non-writable values remain visibly read-only. Browser state is not changed before server confirmation; success replaces it from the response while preserving the selected stable object ID. On conflict the provider fetches a current snapshot and displays the reloaded value.
+
+The server serves only its fixed root page and an allow-list of packaged viewer dependency files. It rejects non-loopback binding and Host headers, cross-origin writes, non-JSON writes, bodies over 64 KiB, unsupported methods and unknown paths. It accepts no browser-provided filesystem path. V0.9 remains local and single-user; it adds no authentication, network deployment, WebSockets, database, file browser or collaboration layer.
+
+Both modes operate on the same authoritative Markdown project. Generated `model.json`, browser snapshots, viewer state and visualization assets never become alternative write targets. Static export remains an offline, fetch-free bundle and requires neither the server nor a server dependency.
+
+```text
+                Markdown
+                   ▲
+                   │ UpdateObjectAttribute
+                   │
+             command layer
+                   ▲
+                   │
+             HTTP endpoints
+                   ▲
+                   │
+           HttpDataProvider
+                   ▲
+                   │
+                Browser
+
+Markdown → snapshot → EmbeddedDataProvider → static file:// viewer
+```

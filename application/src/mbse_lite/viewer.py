@@ -125,14 +125,20 @@ def export_viewer(
     views: Sequence[ViewDefinition] | None = None,
     view_assets: Mapping[str, str | bytes] | None = None,
     cad_preview_dir: str | Path | None = None,
+    data_provider: str = "embedded",
 ) -> None:
-    """Generate a read-only, manifest-driven web viewer bundle.
+    """Generate manifest-driven viewer HTML and its local browser assets.
 
-    ``output`` remains the HTML path for backwards compatibility. The bundle
+    ``output`` remains the HTML path for backwards compatibility. Embedded
+    mode is the default read-only ``file://`` bundle. HTTP mode emits the same
+    renderer with its project data supplied by the local server. The bundle
     also contains sibling ``model.json``, ``viewer.json`` and referenced view
     assets. Text assets and selected binary renderer assets are embedded in the
     HTML so the viewer still works when opened directly through ``file://``.
     """
+
+    if data_provider not in {"embedded", "http"}:
+        raise ValueError(f"Unsupported viewer data provider: {data_provider}")
 
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -330,6 +336,12 @@ tbody tr.object-row { cursor: pointer; }
 .detail dd { margin: 0; overflow-wrap: anywhere; }
 .detail ul { padding-left: 1.2rem; }
 .detail li { margin: .5rem 0; overflow-wrap: anywhere; }
+.attribute-editor { display: flex; gap: .35rem; align-items: center; }
+.attribute-editor input { min-width: 0; width: 100%; }
+.attribute-editor button { border: 1px solid var(--line); border-radius: .45rem; padding: .5rem .65rem; background: var(--accent); color: white; cursor: pointer; }
+.attribute-editor button:disabled { cursor: wait; opacity: .65; }
+.edit-feedback { grid-column: 1 / -1; margin: .35rem 0; padding: .55rem .65rem; border-radius: .45rem; background: var(--accent-soft); }
+.edit-feedback.error { color: var(--error); }
 .graph { background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; padding: 1rem; overflow: auto; margin-bottom: 1rem; }
 .data-block { margin: 1rem 0 1.4rem; }
 .data-block h3 { margin-bottom: .35rem; }
@@ -388,7 +400,7 @@ window.mbseMermaidReady = Promise.resolve().then(() => {
 <header>
   <div class="brand">
     <h1>__TITLE__</h1>
-    <p>MBSE Lite · local read-only viewer</p>
+    <p>__MODE_LABEL__</p>
   </div>
   <div id="modelCounts" class="muted"></div>
 </header>
@@ -401,30 +413,7 @@ window.mbseMermaidReady = Promise.resolve().then(() => {
   </aside>
 </div>
 <script>
-const embeddedViewerManifest = __MANIFEST_JSON__;
-const embeddedViewerModel = __MODEL_JSON__;
-const embeddedViewAssets = __ASSETS_JSON__;
-const embeddedBinaryViewAssets = __BINARY_ASSETS_JSON__;
-const viewAssetErrors = __ASSET_ERRORS_JSON__;
-
-class EmbeddedDataProvider {
-  constructor(snapshot) {
-    this.snapshot = snapshot;
-    this.capabilities = Object.freeze({ read: true, write: false });
-  }
-
-  async loadProject() {
-    return { ...this.snapshot, capabilities: this.capabilities };
-  }
-}
-
-const embeddedDataProvider = new EmbeddedDataProvider({
-  manifest: embeddedViewerManifest,
-  model: embeddedViewerModel,
-  assets: embeddedViewAssets,
-  binaryAssets: embeddedBinaryViewAssets,
-  assetErrors: viewAssetErrors
-});
+__PROVIDER_SOURCE__
 
 let viewerManifest = null;
 let viewerModel = null;
@@ -444,6 +433,7 @@ const viewHeader = (view) => `
 let selectedObjectId = null;
 let activeViewId = null;
 let activeRenderer = null;
+let objectEditFeedback = null;
 
 function renderSelectedObject() {
   const detail = document.getElementById('objectDetail');
@@ -461,7 +451,11 @@ function renderSelectedObject() {
   detail.classList.remove('muted');
   const direct = relations.filter(rel => rel.source === object.id || rel.target === object.id);
   const attributes = Object.entries(object.attributes)
-    .map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd>`).join('');
+    .map(([key, value]) => {
+      const editable = dataProvider.capabilities.write && object.editable_attributes?.includes(key);
+      if (!editable) return `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd>`;
+      return `<dt>${escapeHtml(key)}</dt><dd><form class="attribute-editor" data-attribute="${escapeHtml(key)}"><input aria-label="${escapeHtml(key)}" value="${escapeHtml(value)}"><button type="submit">Save</button></form></dd>`;
+    }).join('');
   const relationHtml = direct.length
     ? `<ul>${direct.map(rel => {
         const otherId = rel.source === object.id ? rel.target : rel.source;
@@ -470,10 +464,45 @@ function renderSelectedObject() {
     : '<p class="muted">No direct relations.</p>';
   detail.innerHTML = `
     <h3>${escapeHtml(object.id)} · ${escapeHtml(object.name)}</h3>
-    <dl><dt>Area</dt><dd>${escapeHtml(object.area)}</dd><dt>Type</dt><dd>${escapeHtml(object.type)}</dd><dt>Source</dt><dd>${escapeHtml(object.source_file)}</dd>${attributes}</dl>
+    <dl><dt>Stable ID</dt><dd>${escapeHtml(object.id)} <span class="muted">(read-only)</span></dd><dt>Area</dt><dd>${escapeHtml(object.area)}</dd><dt>Type</dt><dd>${escapeHtml(object.type)}</dd><dt>Source</dt><dd>${escapeHtml(object.source_file)}</dd>${objectEditFeedback ? `<div class="edit-feedback${objectEditFeedback.error ? ' error' : ''}" role="status">${escapeHtml(objectEditFeedback.message)}</div>` : ''}${attributes}</dl>
     <h4>Direct relations</h4>${relationHtml}`;
   detail.querySelectorAll('[data-object-id]').forEach(button =>
     button.addEventListener('click', () => setSelectedObject(button.dataset.objectId)));
+  detail.querySelectorAll('.attribute-editor').forEach(form => form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const attribute = form.dataset.attribute;
+    const input = form.querySelector('input');
+    const button = form.querySelector('button');
+    const expectedOldValue = object.attributes[attribute];
+    button.disabled = true;
+    input.disabled = true;
+    objectEditFeedback = { message: 'Saving…', error: false };
+    try {
+      const snapshot = await dataProvider.updateObjectAttribute({
+        object_id: object.id,
+        attribute,
+        value: input.value,
+        expected_old_value: expectedOldValue
+      });
+      applyProjectSnapshot(snapshot, object.id);
+      objectEditFeedback = { message: 'Saved', error: false };
+    } catch (error) {
+      if (error.code === 'conflict') {
+        try {
+          applyProjectSnapshot(await dataProvider.loadProject(), object.id);
+        } catch (reloadError) {
+          console.error('Reload after conflict failed.', reloadError);
+        }
+        objectEditFeedback = {
+          message: 'The value changed since this page was loaded. Reloaded current value.',
+          error: true
+        };
+      } else {
+        objectEditFeedback = { message: error.message || 'The update failed.', error: true };
+      }
+    }
+    renderSelectedObject();
+  }));
 }
 
 function setSelectedObject(id) {
@@ -1205,14 +1234,16 @@ function registerRenderer(type, factory) {
   if (activeView?.type === type) activateView(activeViewId);
 }
 
-async function bootstrapViewer() {
-  const snapshot = await embeddedDataProvider.loadProject();
+function applyProjectSnapshot(snapshot, preserveObjectId = selectedObjectId) {
   viewerManifest = snapshot.manifest;
   viewerModel = snapshot.model;
   objects = viewerModel.objects;
   relations = viewerModel.relations;
   supportingTables = viewerModel.tables;
   findings = viewerModel.validation;
+  selectedObjectId = preserveObjectId && objects.some(object => object.id === preserveObjectId)
+    ? preserveObjectId
+    : null;
   viewerContext = {
     model: viewerModel,
     manifest: viewerManifest,
@@ -1223,19 +1254,30 @@ async function bootstrapViewer() {
     setSelectedObject,
     getSelectedObjectId: () => selectedObjectId
   };
+  if (window.mbseViewer) {
+    window.mbseViewer.capabilities = snapshot.capabilities;
+    window.mbseViewer.model = viewerModel;
+    window.mbseViewer.manifest = viewerManifest;
+  }
+  document.getElementById('modelCounts').textContent = `${viewerModel.summary.objects} objects · ${viewerModel.summary.relations} relations`;
+  if (activeViewId) activateView(activeViewId);
+}
+
+async function bootstrapViewer() {
+  __LOAD_PROJECT__
+  applyProjectSnapshot(snapshot, null);
 
   window.mbseViewer = {
     getSelectedObjectId: () => selectedObjectId,
     setSelectedObject,
     registerRenderer,
     activateView,
-    provider: embeddedDataProvider,
+    provider: __PROVIDER_REF__,
     capabilities: snapshot.capabilities,
     model: viewerModel,
     manifest: viewerManifest
   };
 
-  document.getElementById('modelCounts').textContent = `${viewerModel.summary.objects} objects · ${viewerModel.summary.relations} relations`;
   renderNavigation();
   renderSelectedObject();
   if (viewerManifest.default_view) activateView(viewerManifest.default_view);
@@ -1243,14 +1285,102 @@ async function bootstrapViewer() {
 }
 
 bootstrapViewer().catch(error => {
-  console.error('The embedded project snapshot could not be loaded.', error);
-  document.getElementById('viewContent').innerHTML = '<div class="card muted">The embedded project snapshot could not be loaded.</div>';
+  console.error('__LOAD_ERROR__', error);
+  document.getElementById('viewContent').innerHTML = '<div class="card muted">__LOAD_ERROR__</div>';
 });
 </script>
 </body>
 </html>
 """
 
+    if data_provider == "embedded":
+        provider_source = """const embeddedViewerManifest = __MANIFEST_JSON__;
+const embeddedViewerModel = __MODEL_JSON__;
+const embeddedViewAssets = __ASSETS_JSON__;
+const embeddedBinaryViewAssets = __BINARY_ASSETS_JSON__;
+const viewAssetErrors = __ASSET_ERRORS_JSON__;
+
+class EmbeddedDataProvider {
+  constructor(snapshot) {
+    this.snapshot = snapshot;
+    this.capabilities = Object.freeze({ read: true, write: false });
+  }
+
+  async loadProject() {
+    return { ...this.snapshot, capabilities: this.capabilities };
+  }
+}
+
+const embeddedDataProvider = new EmbeddedDataProvider({
+  manifest: embeddedViewerManifest,
+  model: embeddedViewerModel,
+  assets: embeddedViewAssets,
+  binaryAssets: embeddedBinaryViewAssets,
+  assetErrors: viewAssetErrors
+});
+const dataProvider = embeddedDataProvider;"""
+        mode_label = "MBSE Lite · local read-only viewer"
+        load_project = "const snapshot = await embeddedDataProvider.loadProject();"
+        provider_ref = "embeddedDataProvider"
+        load_error = "The embedded project snapshot could not be loaded."
+    else:
+        provider_source = """class HttpProviderError extends Error {
+  constructor(message, status, payload) {
+    super(message);
+    this.name = 'HttpProviderError';
+    this.status = status;
+    this.payload = payload;
+    this.code = payload?.error || 'server_error';
+  }
+}
+
+class HttpDataProvider {
+  constructor() {
+    this.capabilities = Object.freeze({ read: true, write: true });
+  }
+
+  async request(path, options = {}) {
+    let response;
+    try {
+      response = await fetch(path, { credentials: 'same-origin', ...options });
+    } catch (error) {
+      throw new HttpProviderError('Could not reach the local MBSE Lite server.', 0, null);
+    }
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { /* concise fallback below */ }
+    if (!response.ok) {
+      throw new HttpProviderError(payload?.message || `Server request failed (${response.status}).`, response.status, payload);
+    }
+    return payload;
+  }
+
+  async loadProject() {
+    return this.request('/api/project', { headers: { Accept: 'application/json' } });
+  }
+
+  async updateObjectAttribute(command) {
+    return this.request('/api/object-attribute', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(command)
+    });
+  }
+}
+
+const httpDataProvider = new HttpDataProvider();
+const dataProvider = httpDataProvider;"""
+        mode_label = "MBSE Lite · local editable application"
+        load_project = "const snapshot = await httpDataProvider.loadProject();"
+        provider_ref = "httpDataProvider"
+        load_error = "The current project snapshot could not be loaded."
+
+    provider_source = (
+        provider_source.replace("__MANIFEST_JSON__", _json_for_html(manifest))
+        .replace("__MODEL_JSON__", _json_for_html(viewer_model))
+        .replace("__ASSETS_JSON__", _json_for_html(embedded_assets))
+        .replace("__BINARY_ASSETS_JSON__", _json_for_html(embedded_binary_assets))
+        .replace("__ASSET_ERRORS_JSON__", _json_for_html(asset_errors))
+    )
     replacements = {
         "__TITLE__": title,
         "__MANIFEST_JSON__": _json_for_html(manifest),
@@ -1260,6 +1390,11 @@ bootstrapViewer().catch(error => {
         "__ASSET_ERRORS_JSON__": _json_for_html(asset_errors),
         "__THREE_ASSET_PATH__": THREE_ASSET_PATH,
         "__MERMAID_ASSET_PATH__": MERMAID_ASSET_PATH,
+        "__MODE_LABEL__": mode_label,
+        "__PROVIDER_SOURCE__": provider_source,
+        "__LOAD_PROJECT__": load_project,
+        "__PROVIDER_REF__": provider_ref,
+        "__LOAD_ERROR__": load_error,
     }
     for token, value in replacements.items():
         html = html.replace(token, value)

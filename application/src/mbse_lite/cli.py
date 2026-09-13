@@ -56,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     view.add_argument("--no-open", action="store_true", help="Generate the viewer without opening a browser")
 
+    serve = sub.add_parser("serve", help="Start the local editable web application")
+    _add_project_argument(serve)
+    serve.add_argument("--host", default="127.0.0.1", help="Loopback address (default: 127.0.0.1)")
+    serve.add_argument("--port", type=int, default=8000, help="Local TCP port (default: 8000)")
+    serve.add_argument("--no-open", action="store_true", help="Do not open the browser automatically")
+
     cad = sub.add_parser(
         "export-cad",
         help="Generate optional CadQuery footprint and conceptual-preview artifacts",
@@ -132,6 +138,24 @@ def main() -> int:
             print("Updated: validation passed")
         else:
             print("No change: validation passed")
+        return 0
+
+    if args.command == "serve":
+        from .server import serve_project
+
+        if not 1 <= args.port <= 65535:
+            print("ERROR: --port must be between 1 and 65535")
+            return 1
+        try:
+            serve_project(
+                args.project,
+                host=args.host,
+                port=args.port,
+                open_browser=not args.no_open,
+            )
+        except (EditingError, OSError, ValueError) as error:
+            print(f"ERROR: {error}")
+            return 1
         return 0
 
     if args.command == "export-cad":

@@ -49,6 +49,26 @@ class UpdateAttributeResult:
     validation_findings: tuple[tuple[str, str], ...]
 
 
+def editable_attribute_names(obj: object) -> tuple[str, ...]:
+    """Return scalar attributes addressable by the controlled writer.
+
+    Editability is derived from parsed attribute provenance, not a browser-side
+    allow-list. Stable IDs and object types are deliberately outside the
+    attribute mapping and therefore cannot be returned here.
+    """
+
+    attributes = getattr(obj, "attributes", {})
+    sources = getattr(obj, "attribute_sources", {})
+    object_id = getattr(obj, "id", None)
+    return tuple(
+        name
+        for name in attributes
+        if (source := sources.get(name)) is not None
+        and source.row_id == object_id
+        and source.column == name
+    )
+
+
 def encode_markdown_table_cell(value: str) -> str:
     """Encode a semantic string as one physical Markdown table cell."""
 
@@ -331,6 +351,7 @@ __all__ = [
     "EditValidationError",
     "UpdateAttributeResult",
     "UpdateObjectAttribute",
+    "editable_attribute_names",
     "encode_markdown_table_cell",
     "update_object_attribute",
 ]
