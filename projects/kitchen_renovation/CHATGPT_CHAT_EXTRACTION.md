@@ -75,7 +75,7 @@ Nevymýšlej žádnou informaci, která v dosavadním chatu není skutečně pod
 
 Pokud je informace nejasná, neúplná nebo si odporuje s jinou částí chatu či současným GitHub modelem, nevytvářej z ní potvrzený fakt. Označ ji jako TBD, ASSUMPTION, PROPOSAL nebo OPEN ISSUE a konflikt explicitně popiš.
 
-DEDUKLIKACE A POROVNÁNÍ
+DEDUPLIKACE A POROVNÁNÍ
 
 Před každým zápisem porovnej extrahovanou informaci se současným MBSE modelem.
 
