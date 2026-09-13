@@ -75,7 +75,7 @@ PREFIX-NNN
 
 Examples: `REQ-001`, `FUN-004`, `DEC-002`.
 
-`PREFIX` must be one of the prefixes in the Object types table above and `NNN` must be exactly three decimal digits. Unknown prefixes and any other ID format are validation errors.
+`PREFIX` must be one of the prefixes in the Object types table above. The numeric suffix must contain at least three decimal digits; wider suffixes are valid once a sequence exceeds its existing width. Unknown prefixes, shorter suffixes and non-numeric suffixes are validation errors.
 
 IDs are unique across the whole project, including both `mbse/` and `project_management/`, and should not be reused after an object is deleted or deprecated.
 
@@ -121,7 +121,7 @@ The vocabulary is deliberately small in the POC. New relation types should be ad
 
 The tool checks at least:
 
-1. every object ID has the exact `PREFIX-NNN` format, uses a documented prefix and is unique across all project areas,
+1. every object ID uses the `PREFIX-NNN` form with at least three suffix digits, uses a documented prefix and is unique across all project areas,
 2. relation sources and targets exist and relation types are not empty,
 3. every requirement has an incoming `derives` relation whose source is a Need,
 4. every requirement has at least one outgoing `satisfied_by` relation,

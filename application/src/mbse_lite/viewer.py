@@ -319,8 +319,22 @@ h3 { margin-top: 1.4rem; }
 .card strong { display: block; font-size: 1.65rem; margin-top: .25rem; }
 .muted { color: var(--muted); }
 .toolbar { display: flex; gap: .65rem; flex-wrap: wrap; margin: .8rem 0 1rem; }
-input, select { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: .5rem; padding: .55rem .7rem; font: inherit; }
+input, select, textarea { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: .5rem; padding: .55rem .7rem; font: inherit; }
 input[type="search"] { min-width: min(420px, 100%); flex: 1; }
+.primary-action { border: 1px solid var(--accent); border-radius: .5rem; padding: .55rem .8rem; background: var(--accent); color: white; cursor: pointer; font: inherit; }
+.primary-action:disabled { cursor: not-allowed; opacity: .55; }
+.authoring-actions { display: flex; align-items: center; gap: .75rem; }
+.requirement-dialog { width: min(620px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; border: 1px solid var(--line); border-radius: .75rem; background: var(--panel); color: var(--text); padding: 1.2rem; }
+.requirement-dialog::backdrop { background: rgb(0 0 0 / .45); }
+.requirement-dialog h2 { margin: 0 0 .35rem; }
+.requirement-form-fields { display: grid; gap: .8rem; margin: 1rem 0; }
+.requirement-field { display: grid; gap: .3rem; }
+.requirement-field textarea { min-height: 6rem; resize: vertical; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+.dialog-actions button { border: 1px solid var(--line); border-radius: .5rem; padding: .55rem .8rem; background: var(--panel); color: var(--text); cursor: pointer; font: inherit; }
+.dialog-actions button[type="submit"] { background: var(--accent); border-color: var(--accent); color: white; }
+.creation-feedback { min-height: 1.3rem; margin: .65rem 0 0; }
+.creation-feedback.error { color: var(--error); }
 .table-wrap { overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; margin-bottom: 1rem; }
 table { border-collapse: collapse; width: 100%; font-size: .92rem; }
 th, td { padding: .6rem .75rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
@@ -402,7 +416,7 @@ window.mbseMermaidReady = Promise.resolve().then(() => {
     <h1>__TITLE__</h1>
     <p>__MODE_LABEL__</p>
   </div>
-  <div id="modelCounts" class="muted"></div>
+  <div class="authoring-actions"><div id="modelCounts" class="muted"></div>__AUTHORING_UI__</div>
 </header>
 <div class="layout">
   <nav id="viewNavigation" aria-label="Project views"></nav>
@@ -414,6 +428,7 @@ window.mbseMermaidReady = Promise.resolve().then(() => {
 </div>
 <script>
 __PROVIDER_SOURCE__
+__AUTHORING_SOURCE__
 
 let viewerManifest = null;
 let viewerModel = null;
@@ -1259,6 +1274,7 @@ function applyProjectSnapshot(snapshot, preserveObjectId = selectedObjectId) {
     window.mbseViewer.model = viewerModel;
     window.mbseViewer.manifest = viewerManifest;
   }
+  __AUTHORING_SNAPSHOT_HOOK__
   document.getElementById('modelCounts').textContent = `${viewerModel.summary.objects} objects · ${viewerModel.summary.relations} relations`;
   if (activeViewId) activateView(activeViewId);
 }
@@ -1323,6 +1339,9 @@ const dataProvider = embeddedDataProvider;"""
         load_project = "const snapshot = await embeddedDataProvider.loadProject();"
         provider_ref = "embeddedDataProvider"
         load_error = "The embedded project snapshot could not be loaded."
+        authoring_ui = ""
+        authoring_source = ""
+        authoring_snapshot_hook = ""
     else:
         provider_source = """class HttpProviderError extends Error {
   constructor(message, status, payload) {
@@ -1337,6 +1356,15 @@ const dataProvider = embeddedDataProvider;"""
 class HttpDataProvider {
   constructor() {
     this.capabilities = Object.freeze({ read: true, write: true });
+  }
+
+  withServerCapabilities(snapshot) {
+    const capabilities = { read: true, write: true };
+    if (snapshot?.authoring?.requirements?.create?.enabled === true) {
+      capabilities.createRequirement = true;
+    }
+    this.capabilities = Object.freeze(capabilities);
+    return { ...snapshot, capabilities: this.capabilities };
   }
 
   async request(path, options = {}) {
@@ -1355,7 +1383,9 @@ class HttpDataProvider {
   }
 
   async loadProject() {
-    return this.request('/api/project', { headers: { Accept: 'application/json' } });
+    return this.withServerCapabilities(
+      await this.request('/api/project', { headers: { Accept: 'application/json' } })
+    );
   }
 
   async updateObjectAttribute(command) {
@@ -1365,6 +1395,19 @@ class HttpDataProvider {
       body: JSON.stringify(command)
     });
   }
+
+  async createRequirement(command) {
+    if (this.capabilities.createRequirement !== true) {
+      throw new HttpProviderError('Requirement creation is not enabled for this project.', 422, null);
+    }
+    const result = await this.request('/api/requirements', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(command)
+    });
+    result.project = this.withServerCapabilities(result.project);
+    return result;
+  }
 }
 
 const httpDataProvider = new HttpDataProvider();
@@ -1373,6 +1416,121 @@ const dataProvider = httpDataProvider;"""
         load_project = "const snapshot = await httpDataProvider.loadProject();"
         provider_ref = "httpDataProvider"
         load_error = "The current project snapshot could not be loaded."
+        authoring_ui = """<button id="createRequirementButton" class="primary-action" type="button" aria-describedby="createRequirementReason" hidden>Create Requirement</button><span id="createRequirementReason" class="muted" hidden></span>
+<dialog id="requirementDialog" class="requirement-dialog" aria-labelledby="requirementDialogTitle">
+  <form id="requirementForm" method="dialog">
+    <h2 id="requirementDialogTitle">Create Requirement</h2>
+    <p class="muted">The stable ID is assigned by MBSE Lite. No relation is created automatically.</p>
+    <div class="requirement-field"><label for="suggestedRequirementId">Suggested ID</label><input id="suggestedRequirementId" readonly></div>
+    <div id="requirementFormFields" class="requirement-form-fields"></div>
+    <p id="requirementCreationFeedback" class="creation-feedback" role="status"></p>
+    <div class="dialog-actions"><button id="cancelRequirementButton" type="button">Cancel</button><button type="submit">Save</button></div>
+  </form>
+</dialog>"""
+        authoring_source = r"""
+const createRequirementButton = document.getElementById('createRequirementButton');
+const createRequirementReason = document.getElementById('createRequirementReason');
+const requirementDialog = document.getElementById('requirementDialog');
+const requirementForm = document.getElementById('requirementForm');
+const requirementFormFields = document.getElementById('requirementFormFields');
+const suggestedRequirementId = document.getElementById('suggestedRequirementId');
+const requirementCreationFeedback = document.getElementById('requirementCreationFeedback');
+let requirementCreationMetadata = null;
+
+function syncRequirementCreation(snapshot) {
+  requirementCreationMetadata = snapshot?.authoring?.requirements?.create || null;
+  createRequirementButton.hidden = false;
+  createRequirementButton.disabled = requirementCreationMetadata?.enabled !== true;
+  createRequirementButton.title = requirementCreationMetadata?.enabled
+    ? 'Create one Requirement in the authoritative Markdown table.'
+    : (requirementCreationMetadata?.reason || 'Requirement creation is unavailable.');
+  createRequirementReason.hidden = requirementCreationMetadata?.enabled === true;
+  createRequirementReason.textContent = requirementCreationMetadata?.enabled
+    ? ''
+    : createRequirementButton.title;
+}
+
+function renderRequirementForm(metadata, preservedValues = null) {
+  suggestedRequirementId.value = metadata.suggested_id || '';
+  requirementForm.dataset.expectedTableRevision = metadata.expected_table_revision || '';
+  requirementFormFields.innerHTML = '';
+  metadata.columns.forEach(column => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'requirement-field';
+    const label = document.createElement('label');
+    const inputId = `requirement-${column.name.replace(/[^A-Za-z0-9_-]/g, '-')}`;
+    label.htmlFor = inputId;
+    label.textContent = column.name + (column.required ? ' *' : '');
+    const isRequirementText = column.name === 'Requirement' || column.name === 'Description';
+    const input = document.createElement(isRequirementText ? 'textarea' : 'input');
+    input.id = inputId;
+    input.name = column.name;
+    input.required = column.required === true;
+    input.value = preservedValues?.[column.name] ?? column.default ?? '';
+    wrapper.append(label, input);
+    requirementFormFields.appendChild(wrapper);
+  });
+}
+
+function currentRequirementValues() {
+  return Object.fromEntries(
+    [...requirementFormFields.querySelectorAll('[name]')].map(input => [input.name, input.value])
+  );
+}
+
+createRequirementButton.addEventListener('click', () => {
+  if (requirementCreationMetadata?.enabled !== true) return;
+  renderRequirementForm(requirementCreationMetadata);
+  requirementCreationFeedback.textContent = '';
+  requirementCreationFeedback.classList.remove('error');
+  if (typeof requirementDialog.showModal === 'function') requirementDialog.showModal();
+  else requirementDialog.setAttribute('open', '');
+});
+
+document.getElementById('cancelRequirementButton').addEventListener('click', () => {
+  if (typeof requirementDialog.close === 'function') requirementDialog.close();
+  else requirementDialog.removeAttribute('open');
+});
+
+requirementForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!requirementForm.reportValidity()) return;
+  const values = currentRequirementValues();
+  const saveButton = requirementForm.querySelector('button[type="submit"]');
+  saveButton.disabled = true;
+  requirementCreationFeedback.textContent = 'Saving…';
+  requirementCreationFeedback.classList.remove('error');
+  try {
+    const result = await dataProvider.createRequirement({
+      values,
+      expected_table_revision: requirementForm.dataset.expectedTableRevision
+    });
+    objectEditFeedback = { message: 'Requirement created', error: false };
+    applyProjectSnapshot(result.project, result.created_object_id);
+    renderSelectedObject();
+    if (typeof requirementDialog.close === 'function') requirementDialog.close();
+    else requirementDialog.removeAttribute('open');
+  } catch (error) {
+    if (error.status === 409 && error.payload?.reason === 'requirements_table_changed') {
+      const freshProject = error.payload.project;
+      if (freshProject) {
+        const preserved = values;
+        const normalized = dataProvider.withServerCapabilities(freshProject);
+        applyProjectSnapshot(normalized, selectedObjectId);
+        const currentMetadata = normalized.authoring?.requirements?.create;
+        if (currentMetadata?.enabled) renderRequirementForm(currentMetadata, preserved);
+      }
+      requirementCreationFeedback.textContent = 'Requirements changed since the form was opened. Review the current project and save again.';
+    } else {
+      requirementCreationFeedback.textContent = error.message || 'Requirement creation failed.';
+    }
+    requirementCreationFeedback.classList.add('error');
+  } finally {
+    saveButton.disabled = false;
+  }
+});
+"""
+        authoring_snapshot_hook = "syncRequirementCreation(snapshot);"
 
     provider_source = (
         provider_source.replace("__MANIFEST_JSON__", _json_for_html(manifest))
@@ -1392,6 +1550,9 @@ const dataProvider = httpDataProvider;"""
         "__MERMAID_ASSET_PATH__": MERMAID_ASSET_PATH,
         "__MODE_LABEL__": mode_label,
         "__PROVIDER_SOURCE__": provider_source,
+        "__AUTHORING_UI__": authoring_ui,
+        "__AUTHORING_SOURCE__": authoring_source,
+        "__AUTHORING_SNAPSHOT_HOOK__": authoring_snapshot_hook,
         "__LOAD_PROJECT__": load_project,
         "__PROVIDER_REF__": provider_ref,
         "__LOAD_ERROR__": load_error,

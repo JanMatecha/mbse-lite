@@ -1,10 +1,10 @@
-# View Architecture V0.8
+# View Architecture V0.10
 
 ## Purpose
 
 A **View** is one representation of the shared MBSE Lite model. A view does not own engineering identity or become a second model: it references objects through the same stable IDs used in the authoritative Markdown.
 
-View Architecture V0.8 preserves the V0.5 manifest schema while separating three concerns:
+View Architecture V0.10 preserves the V0.5 manifest schema while separating three concerns:
 
 1. Markdown parsing produces the internal MBSE model.
 2. generation produces a renderer-neutral `model.json`, a navigation-oriented `viewer.json` and any view assets,
@@ -292,7 +292,7 @@ footprint-only STEP + conceptual STEP/GLB + validated completion record
 
 `mbse-lite export-cad` consumes the same typed geometry and visualization-role mapping. Its main process validates and serializes the job, while a disposable worker is the only process that imports CadQuery/OCP. `mbse-lite view` may later consume those completed artifacts only when their directory is explicit. CadQuery preserves stable PART IDs as node names; the bridge copies only the explicitly expected identities into `node.extras.mbse_id`, which GLTFLoader exposes as `Object3D.userData.mbse_id` for the existing selection contract. Node names remain useful but are not the authoritative browser identity. The deterministic custom viewer GLB remains the default. See `CAD_ARCHITECTURE.md` for the optional dependency, process boundary, authority, unit and artifact contracts.
 
-## V0.9 local editable serve mode
+## V0.10 local editable serve mode
 
 The implemented command is:
 
@@ -318,7 +318,7 @@ validation
 refreshed project snapshot
 ```
 
-The HTTP transport uses `ThreadingHTTPServer` from the Python standard library behind the narrow, transport-independent `ServeApplication` boundary. This keeps the implementation replaceable without adding a server runtime dependency. Endpoint handlers validate transport concerns and delegate domain work to the existing `UpdateObjectAttribute` command; they do not patch Markdown themselves. Serve mode does not expose CAD generation and does not import CadQuery/OCP.
+The HTTP transport uses `ThreadingHTTPServer` from the Python standard library behind the narrow, transport-independent `ServeApplication` boundary. This keeps the implementation replaceable without adding a server runtime dependency. Endpoint handlers validate transport concerns and delegate domain work to `UpdateObjectAttribute` or `CreateRequirement`; they do not patch Markdown themselves. Both mutations run through one narrow re-entrant lock. Serve mode does not expose CAD generation and does not import CadQuery/OCP.
 
 ```text
 STATIC MODE                          EDITABLE MODE
@@ -330,11 +330,37 @@ read-only                            read/write through commands
 
 `GET /api/project` reloads Markdown and returns the current manifest, renderer-neutral model, view assets, asset errors and `{read: true, write: true}` capabilities. `POST /api/object-attribute` accepts exactly `object_id`, `attribute`, `value` and `expected_old_value`. It resolves the target from provenance, invokes the command layer, validates and atomically commits or rolls back, then returns the refreshed snapshot. Conflicts return HTTP 409 with expected and actual values; malformed requests, unknown objects and domain rejections use deterministic JSON errors without exposing tracebacks.
 
+### Controlled Requirement creation
+
+```text
+Browser Create Requirement form
+    ↓ values + expected_table_revision
+HttpDataProvider → POST /api/requirements
+    ↓
+CreateRequirement
+    ↓ resolve the one provenance-owned Requirement table
+revision check → stable-ID allocation → one candidate Markdown row
+    ↓
+candidate parse + validation + semantic preservation checks
+    ↓
+atomic commit → reload + validation + provenance verification
+    ↓
+created object ID + fresh project snapshot
+```
+
+The resolver derives the source file, table index, physical insertion point, and actual ordered columns from the parsed project model and source provenance. It enables creation only when exactly one existing writable table owns Requirement objects. Absolute paths and internal table coordinates never enter authoring metadata or requests. Different schemas such as `Requirement` versus `Description`, and optional project-specific columns, therefore use the same command without project-specific row code.
+
+The revision is a deterministic SHA-256 fingerprint of the authoritative table's exact source content and logical identity, not a timestamp or browser token. Under the shared mutation lock the command reloads the model, checks this revision, scans every current Requirement ID, and assigns `max(numeric suffix) + 1`; gaps are not reused and padding is at least three digits. A stale form returns HTTP 409 with expected and actual revisions plus a fresh snapshot. The form preserves entered values, adopts the refreshed metadata, and asks the user to review and save again. Two tabs opened at the same revision therefore yield one success and one conflict, never duplicate IDs.
+
+The inserted row clones the table's existing physical row style, replaces cells through the established Markdown-cell encoder, and is placed immediately after the last Requirement row. Existing bytes, headers, separators, other rows, relations, and trailing prose are preserved. Unicode round-trips; pipes, ampersands, line breaks, and boundary whitespace use the existing HTML-entity convention so one value cannot create a column or row. Candidate and committed models must contain exactly the previous objects plus one normally provenance-backed Requirement, with all existing objects and relations unchanged. Unexpected post-commit failure restores the original bytes.
+
+The HTTP-only header button opens a compact schema-driven form, shows the suggested application-owned ID read-only, and renders the advertised writable fields. Success replaces all browser project state, selects the created Requirement, and exposes the existing scalar editor immediately. The Requirement has no automatic Need, Function, Part, Verification, Decision, or other relation, so traceability intentionally reports it as unconnected. If no unambiguous target exists, the button is disabled with the server-provided reason.
+
 The selected-object panel offers Save controls only for provenance-backed scalar attributes advertised by the snapshot. The stable ID, type and non-writable values remain visibly read-only. Browser state is not changed before server confirmation; success replaces it from the response while preserving the selected stable object ID. On conflict the provider fetches a current snapshot and displays the reloaded value.
 
-The server serves only its fixed root page and an allow-list of packaged viewer dependency files. It rejects non-loopback binding and Host headers, cross-origin writes, non-JSON writes, bodies over 64 KiB, unsupported methods and unknown paths. It accepts no browser-provided filesystem path. V0.9 remains local and single-user; it adds no authentication, network deployment, WebSockets, database, file browser or collaboration layer.
+The server serves only its fixed root page and an allow-list of packaged viewer dependency files. It rejects non-loopback binding and Host headers, cross-origin writes, non-JSON writes, bodies over 64 KiB, unsupported methods and unknown paths. It accepts no browser-provided filesystem path. V0.10 remains local and single-user; it adds no authentication, network deployment, WebSockets, database, file browser or collaboration layer.
 
-Both modes operate on the same authoritative Markdown project. Generated `model.json`, browser snapshots, viewer state and visualization assets never become alternative write targets. Static export remains an offline, fetch-free bundle and requires neither the server nor a server dependency.
+Both modes operate on the same authoritative Markdown project. Generated `model.json`, browser snapshots, viewer state and visualization assets never become alternative write targets. Static export remains an offline, fetch-free bundle and requires neither the server nor a server dependency; it contains no Create Requirement control or create endpoint dependency. Requirement creation does not invoke CadQuery, OCP, STEP/GLB generation, or visualization-file updates. Existing generated CAD can therefore become logically stale after authoring and must be regenerated explicitly in a later workflow.
 
 ```text
                 Markdown

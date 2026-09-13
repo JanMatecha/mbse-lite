@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import shutil
 import subprocess
@@ -8,7 +7,24 @@ from pathlib import Path
 import pytest
 
 
-CADQUERY_AVAILABLE = importlib.util.find_spec("cadquery") is not None
+def _cadquery_is_usable() -> bool:
+    """Probe the optional native dependency without importing it into pytest.
+
+    Package metadata alone is insufficient: CadQuery can be present while its
+    OCP DLLs are unavailable.  A successful probe exits before native module
+    teardown, matching the isolated worker's supported process boundary.
+    """
+
+    completed = subprocess.run(
+        [sys.executable, "-c", "import cadquery, os; os._exit(0)"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return completed.returncode == 0
+
+
+CADQUERY_AVAILABLE = _cadquery_is_usable()
 EXPECTED_COMPONENT_IDS = (
     "PART-001",
     "PART-004",

@@ -100,6 +100,22 @@ def command(**changes: str) -> dict[str, str]:
     return payload
 
 
+def creation_command(application: ServeApplication, **changes) -> dict[str, object]:
+    metadata = application.project_snapshot()["authoring"]["requirements"]["create"]
+    payload: dict[str, object] = {
+        "values": {
+            "Name": "Temporary",
+            "Requirement": "Temporary requirement.",
+            "Target Length [m]": "",
+            "Target Depth [m]": "",
+            "Status": "Draft",
+        },
+        "expected_table_revision": metadata["expected_table_revision"],
+    }
+    payload.update(changes)
+    return payload
+
+
 @contextmanager
 def running_server(application: ServeApplication):
     server = make_http_server(
@@ -109,23 +125,32 @@ def running_server(application: ServeApplication):
         b"<!doctype html><title>test</title>",
         {},
     )
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    # Production request threads are daemonized so Ctrl+C cannot be held open
+    # by an abandoned local client. Tests instead join every request handler,
+    # proving that no socket or tmp_path user survives fixture teardown.
+    server.daemon_threads = False
+    thread = threading.Thread(target=server.serve_forever)
     thread.start()
     try:
         yield server.server_address[1]
     finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+        try:
+            server.shutdown()
+            thread.join()
+        finally:
+            server.server_close()
+        assert not thread.is_alive()
 
 
 def request(port: int, method: str, path: str, body: bytes | None = None, headers=None):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    connection.request(method, path, body=body, headers=headers or {})
-    response = connection.getresponse()
-    raw = response.read()
-    connection.close()
-    return response.status, dict(response.getheaders()), raw
+    try:
+        connection.request(method, path, body=body, headers=headers or {})
+        response = connection.getresponse()
+        raw = response.read()
+        return response.status, dict(response.getheaders()), raw
+    finally:
+        connection.close()
 
 
 def test_project_snapshot_is_current_editable_and_provenance_drives_editability(tmp_path):
@@ -138,7 +163,90 @@ def test_project_snapshot_is_current_editable_and_provenance_drives_editability(
     )
     assert "Status" in requirement["editable_attributes"]
     assert "ID" not in requirement["editable_attributes"]
+    creation = snapshot["authoring"]["requirements"]["create"]
+    assert creation["enabled"] is True
+    assert creation["suggested_id"] == "REQ-010"
+    assert [column["name"] for column in creation["columns"]] == [
+        "Name",
+        "Requirement",
+        "Target Length [m]",
+        "Target Depth [m]",
+        "Status",
+    ]
+    assert "source_file" not in creation
     assert not Path(tmp_path, "model.json").exists()
+
+
+def test_snapshot_disables_creation_with_reason_when_no_requirement_table_exists(tmp_path):
+    (tmp_path / "parts.md").write_text(
+        "| ID | Name |\n|---|---|\n| PART-001 | Frame |\n", encoding="utf-8"
+    )
+
+    creation = ServeApplication(tmp_path).project_snapshot()["authoring"]["requirements"][
+        "create"
+    ]
+
+    assert creation["enabled"] is False
+    assert "No existing writable Requirement table" in creation["reason"]
+    assert "expected_table_revision" not in creation
+
+
+def test_create_requirement_api_returns_id_and_authoritative_fresh_snapshot(tmp_path):
+    source = write_project(tmp_path)
+    application = ServeApplication(tmp_path)
+    response = application.create_requirement(creation_command(application))
+
+    assert response.status == 201
+    assert response.body["created_object_id"] == "REQ-010"
+    created = next(
+        item
+        for item in response.body["project"]["model"]["objects"]
+        if item["id"] == "REQ-010"
+    )
+    assert created["attributes"]["Name"] == "Temporary"
+    assert created["attributes"]["Status"] == "Draft"
+    assert source.read_text(encoding="utf-8").count("REQ-010") == 1
+    assert not (tmp_path / "model.json").exists()
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"values": {"ID": "REQ-999"}},
+        {"values": {"Name": "x", "path": "outside.md"}},
+        {"values": {"Name": "x", "file": "requirements.md"}},
+        {"values": {"Name": "x", "table_index": "1"}},
+        {"values": {"Name": "x", "Unknown": "value"}},
+        {"path": "outside.md"},
+    ],
+)
+def test_create_api_rejects_browser_authority_and_unknown_columns(tmp_path, changes):
+    source = write_project(tmp_path)
+    application = ServeApplication(tmp_path)
+    before = source.read_bytes()
+
+    response = application.create_requirement(creation_command(application, **changes))
+
+    assert response.status in {400, 422}
+    assert source.read_bytes() == before
+
+
+def test_stale_create_conflict_returns_fresh_metadata_and_does_not_insert(tmp_path):
+    source = write_project(tmp_path)
+    application = ServeApplication(tmp_path)
+    stale_payload = creation_command(application)
+    assert application.update_object_attribute(command()).status == 200
+    after_update = source.read_bytes()
+
+    response = application.create_requirement(stale_payload)
+
+    assert response.status == 409
+    assert response.body["error"] == "conflict"
+    assert response.body["reason"] == "requirements_table_changed"
+    assert response.body["expected"] != response.body["actual"]
+    assert response.body["project"]["authoring"]["requirements"]["create"]["enabled"]
+    assert source.read_bytes() == after_update
+    assert "REQ-010" not in load_model(tmp_path).objects
 
 
 def test_successful_update_changes_only_markdown_cell_and_returns_fresh_snapshot(tmp_path):
@@ -247,6 +355,23 @@ def test_http_get_post_and_request_guards(tmp_path):
         )
         assert requirement["attributes"]["Status"] == "Confirmed"
 
+        snapshot_response = ServeApplication(tmp_path)
+        create_payload = creation_command(snapshot_response)
+        status, _, raw = request(
+            port,
+            "POST",
+            "/api/requirements",
+            json.dumps(create_payload).encode(),
+            {"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{port}"},
+        )
+        created_payload = json.loads(raw)
+        assert status == 201
+        assert created_payload["created_object_id"] == "REQ-010"
+        assert any(
+            item["id"] == "REQ-010"
+            for item in created_payload["project"]["model"]["objects"]
+        )
+
         malformed_before = source.read_bytes()
         status, _, raw = request(
             port,
@@ -269,6 +394,9 @@ def test_http_get_post_and_request_guards(tmp_path):
                     "Connection: close\r\n\r\n"
                 ).encode()
             )
+            # The declared oversized body is intentionally omitted; finish the
+            # request direction so Windows performs an orderly TCP close.
+            client.shutdown(socket.SHUT_WR)
             chunks = []
             while chunk := client.recv(4096):
                 chunks.append(chunk)
@@ -281,12 +409,14 @@ def test_http_get_post_and_request_guards(tmp_path):
         status, _, _ = request(port, "PUT", "/api/object-attribute", b"")
         assert status == 405
 
+        # Origin is a header-only guard; an irrelevant body would be rejected
+        # unread and manufacture an abortive Windows connection close.
         status, _, raw = request(
             port,
             "POST",
             "/api/object-attribute",
-            json.dumps(command()).encode(),
-            {"Content-Type": "application/json", "Origin": "https://example.com"},
+            b"",
+            {"Origin": "https://example.com"},
         )
         assert status == 403
         assert json.loads(raw)["error"] == "cross_origin"
@@ -295,11 +425,71 @@ def test_http_get_post_and_request_guards(tmp_path):
             port,
             "POST",
             "/api/object-attribute",
-            json.dumps(command()).encode(),
-            {"Content-Type": "application/json", "Origin": "http://localhost:not-a-port"},
+            b"",
+            {"Origin": "http://localhost:not-a-port"},
         )
         assert status == 403
         assert json.loads(raw)["error"] == "cross_origin"
+
+
+def test_requirement_endpoint_preserves_json_size_origin_host_and_method_guards(tmp_path):
+    source = write_project(tmp_path)
+    before = source.read_bytes()
+    with running_server(ServeApplication(tmp_path)) as port:
+        status, _, raw = request(
+            port,
+            "POST",
+            "/api/requirements",
+            b"{not json",
+            {"Content-Type": "application/json"},
+        )
+        assert status == 400
+        assert json.loads(raw)["error"] == "invalid_json"
+
+        # These header-only guards intentionally run before body parsing.
+        status, _, raw = request(
+            port,
+            "POST",
+            "/api/requirements",
+            b"",
+            {"Origin": "https://example.com"},
+        )
+        assert status == 403
+        assert json.loads(raw)["error"] == "cross_origin"
+
+        status, _, raw = request(
+            port,
+            "POST",
+            "/api/requirements",
+            b"",
+            {"Host": "example.com"},
+        )
+        assert status == 403
+        assert json.loads(raw)["error"] == "forbidden_host"
+
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as client:
+            client.sendall(
+                b"POST /api/requirements HTTP/1.1\r\n"
+                + f"Host: 127.0.0.1:{port}\r\n".encode()
+                + b"Content-Type: application/json\r\n"
+                + (
+                    f"Content-Length: {MAX_REQUEST_BODY + 1}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+            )
+            # The declared oversized body is intentionally omitted; finish the
+            # request direction so Windows performs an orderly TCP close.
+            client.shutdown(socket.SHUT_WR)
+            raw_response = b""
+            while chunk := client.recv(4096):
+                raw_response += chunk
+        assert int(raw_response.split(b"\r\n", 1)[0].split()[1]) == 413
+        assert json.loads(raw_response.split(b"\r\n\r\n", 1)[1])["error"] == "request_too_large"
+
+        status, _, _ = request(port, "PUT", "/api/requirements", b"")
+        assert status == 405
+
+    assert source.read_bytes() == before
 
 
 def test_http_provider_uses_api_command_and_preserves_selection_after_refresh(tmp_path):
@@ -313,6 +503,13 @@ def test_http_provider_uses_api_command_and_preserves_selection_after_refresh(tm
     assert "fetch(path" in html
     assert "this.request('/api/project'" in html
     assert "this.request('/api/object-attribute'" in html
+    assert "this.request('/api/requirements'" in html
+    assert "capabilities.createRequirement = true" in html
+    assert "expected_table_revision: requirementForm.dataset.expectedTableRevision" in html
+    assert "applyProjectSnapshot(result.project, result.created_object_id)" in html
+    assert "Requirements changed since the form was opened" in html
+    assert "const preserved = values" in html
+    assert "Create Requirement" in html
     assert "object_id: object.id" in html
     assert "expected_old_value: expectedOldValue" in html
     assert "error.code === 'conflict'" in html

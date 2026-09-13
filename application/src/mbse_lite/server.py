@@ -17,11 +17,15 @@ from urllib.parse import urlsplit
 
 from .core import load_model
 from .editing import (
+    CreateRequirement,
     EditConflictError,
     EditingError,
     EditValidationError,
+    RequirementTableConflictError,
     UpdateObjectAttribute,
+    create_requirement,
     editable_attribute_names,
+    requirement_creation_metadata,
     update_object_attribute,
 )
 from .view_architecture import (
@@ -38,6 +42,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 MAX_REQUEST_BODY = 64 * 1024
 _UPDATE_FIELDS = {"object_id", "attribute", "value", "expected_old_value"}
+_CREATE_REQUIREMENT_FIELDS = {"values", "expected_table_revision"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +62,10 @@ class ServeApplication:
         self._write_lock = threading.RLock()
 
     def project_snapshot(self) -> dict[str, object]:
+        with self._write_lock:
+            return self._project_snapshot()
+
+    def _project_snapshot(self) -> dict[str, object]:
         model = load_model(self.project_path)
         definitions = list(default_view_definitions())
         assets: dict[str, str | bytes] = dict(build_default_view_assets(model))
@@ -102,6 +111,11 @@ class ServeApplication:
             },
             "assetErrors": asset_errors,
             "capabilities": {"read": True, "write": True},
+            "authoring": {
+                "requirements": {
+                    "create": requirement_creation_metadata(self.project_path)
+                }
+            },
         }
 
     def update_object_attribute(self, payload: object) -> ApiResponse:
@@ -188,6 +202,70 @@ class ServeApplication:
                 return _error(422, "editing_rejected", str(error))
             return ApiResponse(200, self.project_snapshot())
 
+    def create_requirement(self, payload: object) -> ApiResponse:
+        if not isinstance(payload, dict):
+            return _error(400, "invalid_request", "The JSON body must be an object.")
+        provided = set(payload)
+        if provided != _CREATE_REQUIREMENT_FIELDS:
+            missing = sorted(_CREATE_REQUIREMENT_FIELDS - provided)
+            extra = sorted(provided - _CREATE_REQUIREMENT_FIELDS)
+            details = []
+            if missing:
+                details.append("missing: " + ", ".join(missing))
+            if extra:
+                details.append("unsupported: " + ", ".join(extra))
+            return _error(
+                400,
+                "invalid_request",
+                "Invalid request fields (" + "; ".join(details) + ").",
+            )
+        values = payload["values"]
+        revision = payload["expected_table_revision"]
+        if not isinstance(values, dict) or not isinstance(revision, str) or not revision:
+            return _error(
+                400,
+                "invalid_request",
+                "values must be an object and expected_table_revision a non-empty string.",
+            )
+        if any(not isinstance(key, str) or not isinstance(value, str) for key, value in values.items()):
+            return _error(400, "invalid_request", "All Requirement values must be strings.")
+
+        with self._write_lock:
+            try:
+                result = create_requirement(
+                    self.project_path,
+                    CreateRequirement(
+                        values=values,
+                        expected_table_revision=revision,
+                    ),
+                )
+            except RequirementTableConflictError as error:
+                return ApiResponse(
+                    409,
+                    {
+                        "error": "conflict",
+                        "reason": "requirements_table_changed",
+                        "message": (
+                            "The Requirements table changed since this form was opened. "
+                            "Review the current project and save again."
+                        ),
+                        "expected": error.expected,
+                        "actual": error.actual,
+                        "project": self.project_snapshot(),
+                    },
+                )
+            except EditValidationError as error:
+                return _error(422, "validation_error", str(error))
+            except EditingError as error:
+                return _error(422, "creation_rejected", str(error))
+            return ApiResponse(
+                201,
+                {
+                    "created_object_id": result.created_object_id,
+                    "project": self.project_snapshot(),
+                },
+            )
+
 
 def _error(status: int, code: str, message: str) -> ApiResponse:
     return ApiResponse(status, {"error": code, "message": message})
@@ -208,7 +286,7 @@ def _handler_class(
     static_assets: Mapping[str, tuple[str, bytes]],
 ):
     class LocalRequestHandler(BaseHTTPRequestHandler):
-        server_version = "MBSELiteLocal/0.9"
+        server_version = "MBSELiteLocal/0.10"
 
         def _json(self, response: ApiResponse) -> None:
             content = json.dumps(response.body, ensure_ascii=False).encode("utf-8")
@@ -252,7 +330,7 @@ def _handler_class(
                         )
                     )
                 return
-            if path == "/api/object-attribute":
+            if path in {"/api/object-attribute", "/api/requirements"}:
                 self._method_not_allowed()
                 return
             asset = static_assets.get(path)
@@ -281,7 +359,7 @@ def _handler_class(
             if path in {"/", "/api/project"}:
                 self._method_not_allowed()
                 return
-            if path != "/api/object-attribute":
+            if path not in {"/api/object-attribute", "/api/requirements"}:
                 self._json(_error(404, "not_found", "Resource not found."))
                 return
             origin = self.headers.get("Origin")
@@ -337,10 +415,14 @@ def _handler_class(
                 self._json(_error(400, "invalid_json", "The request body is not valid UTF-8 JSON."))
                 return
             try:
-                self._json(application.update_object_attribute(payload))
+                if path == "/api/object-attribute":
+                    response = application.update_object_attribute(payload)
+                else:
+                    response = application.create_requirement(payload)
+                self._json(response)
             except Exception:
-                logging.exception("Unexpected local update failure")
-                self._json(_error(500, "internal_error", "The update could not be completed."))
+                logging.exception("Unexpected local mutation failure")
+                self._json(_error(500, "internal_error", "The write could not be completed."))
 
         def _method_not_allowed(self) -> None:
             self.send_response(HTTPStatus.METHOD_NOT_ALLOWED)
@@ -364,7 +446,7 @@ def make_http_server(
     static_assets: Mapping[str, tuple[str, bytes]],
 ) -> ThreadingHTTPServer:
     if not is_loopback_host(host):
-        raise ValueError("The V0.9 server may bind only to a loopback address.")
+        raise ValueError("The V0.10 server may bind only to a loopback address.")
     return ThreadingHTTPServer(
         (host, port), _handler_class(application, index_html, static_assets)
     )

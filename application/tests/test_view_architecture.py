@@ -120,6 +120,9 @@ def test_static_viewer_bootstraps_through_read_only_embedded_provider(tmp_path):
     assert "MBSE Lite · local read-only viewer" in html
     assert "class HttpDataProvider" not in html
     assert "fetch(" not in html
+    assert "Create Requirement" not in html
+    assert "/api/requirements" not in html
+    assert "createRequirement" not in html
     assert "cdn.jsdelivr.net" not in html
     assert all(
         dependency not in pyproject.casefold()

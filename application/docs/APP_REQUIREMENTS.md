@@ -60,7 +60,11 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-054 | The local editable server shall bind only to loopback, constrain all writes to the startup project through stable object ID and attribute provenance, and reject arbitrary paths, oversized bodies, unsupported methods and cross-origin browser writes. | Implemented |
 | APP-REQ-055 | The HTTP project endpoint shall return the current generated viewer snapshot with read/write capabilities, while the static embedded provider shall remain read-only and fetch-free for direct `file://` use. | Implemented |
 | APP-REQ-056 | Browser attribute updates shall include the previously observed value, surface optimistic-concurrency conflicts distinctly, and replace browser state only with a refreshed server-authoritative snapshot. | Implemented |
-| APP-REQ-057 | Serve mode shall expose only provenance-backed scalar attributes as editable, keep stable IDs and object types read-only, and shall not create, delete or edit objects or relations. | Implemented |
+| APP-REQ-057 | Serve mode shall expose only provenance-backed scalar attributes as editable, keep stable IDs and object types read-only, and shall not delete, duplicate or generically create objects or edit relations. | Implemented |
+| APP-REQ-058 | The application shall provide a framework-independent CreateRequirement command that discovers exactly one existing Requirement-owning table from model provenance, accepts only semantic column values and never accepts a browser-selected ID or source location. | Implemented |
+| APP-REQ-059 | Requirement creation shall allocate the greatest current numeric REQ suffix plus one with at least three-digit padding, serialize all server mutations, reject stale deterministic table revisions, and validate before and after atomic commit with rollback. | Implemented |
+| APP-REQ-060 | Editable snapshots shall advertise dynamic Requirement-creation schema metadata without absolute filesystem paths; the HTTP provider shall expose creation only when enabled and shall replace browser state with the authoritative returned snapshot. | Implemented |
+| APP-REQ-061 | V0.10 shall create Requirements only, insert exactly one safely encoded Markdown row, assign normal provenance, create no relations, invoke no CAD operation, and leave the static embedded viewer read-only without creation controls. | Implemented |
 
 ## Rule for adding requirements
 

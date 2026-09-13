@@ -152,16 +152,20 @@ Browser startup goes through a read-only `EmbeddedDataProvider` with `{read: tru
 
 ## Local editable web application
 
-Start V0.9 editable mode on the loopback-only default URL `http://127.0.0.1:8000/`:
+Start V0.10 editable mode on the loopback-only default URL `http://127.0.0.1:8000/`:
 
 ```bash
 uv run mbse-lite serve ../projects/garden_tool_shed
 uv run mbse-lite serve ../projects/garden_tool_shed --port 8010 --no-open
 ```
 
-V0.9 uses Python's small standard-library HTTP server behind `ServeApplication`, so no server package or `serve` extra is required. The server accepts only loopback binding, serves a fixed viewer and packaged browser assets, rejects arbitrary paths and cross-origin writes, requires strict JSON, and limits write bodies to 64 KiB. It is a single-user local engineering application, not a remotely deployable service.
+V0.10 uses Python's small standard-library HTTP server behind `ServeApplication`, so no server package or `serve` extra is required. The server accepts only loopback binding, serves a fixed viewer and packaged browser assets, rejects arbitrary paths and cross-origin writes, requires strict JSON, and limits write bodies to 64 KiB. It is a single-user local engineering application, not a remotely deployable service.
 
 The renderer loads the current snapshot through `HttpDataProvider` with `{read: true, write: true}`. Editable scalar attributes are derived from writable source provenance. Save sends `object_id`, `attribute`, `value`, and `expected_old_value` to `POST /api/object-attribute`; the application invokes the existing `UpdateObjectAttribute` command, atomically patches Markdown, reloads and validates, then returns a fresh snapshot. A stale expected value returns HTTP 409 and the UI reloads the current value. Stable IDs, object types, computed fields and attributes without writable provenance remain read-only.
+
+V0.10 adds one deliberately narrow authoring operation: **Create Requirement**. The server discovers the single existing Markdown table that owns Requirement objects and advertises its actual non-ID columns, a deterministic table revision, and a non-authoritative next-ID suggestion. The browser builds the form from that metadata and sends only `values` plus `expected_table_revision` to `POST /api/requirements`; it cannot choose the ID, file, table, or row. `CreateRequirement` reloads the current project under the shared mutation lock, rejects stale revisions, allocates one `REQ-*` ID as the greatest current numeric suffix plus one (minimum three-digit padding), encodes one safe Markdown row, validates a disposable candidate, atomically commits, reloads, verifies provenance, and returns the created ID with a fresh snapshot. A new Requirement is selected immediately and remains unconnected until relations are authored in a future milestone.
+
+Only Requirements can be created. V0.10 does not create other object types or relations, delete or duplicate objects, edit general Markdown, or trigger CAD. If there is no existing writable Requirement table, or more than one candidate table, creation is disabled with a reason rather than guessing. A table change after the form opens returns HTTP 409; the UI retains the entered values while refreshing the authoritative project and revision.
 
 Markdown is still the only source of truth. The browser snapshot and generated `model.json` are never write targets. Serve mode does not invoke CAD generation or import CadQuery/OCP. Static `mbse-lite view` remains unchanged: direct `file://`, `EmbeddedDataProvider`, `{read: true, write: false}`, no fetch and no running server.
 
@@ -189,7 +193,7 @@ npm run build
 
 `package-lock.json` pins the complete update toolchain, including esbuild `0.25.9`. Normal Python installation, testing and viewer generation do not require Node. Three.js and Mermaid are MIT-licensed; their license files are packaged and copied beside the browser assets. Dependency upgrades must retain upstream notices and recheck licenses, including Mermaid's bundled transitive code.
 
-See `docs/VIEW_ARCHITECTURE.md` for the V0.9 static/editable viewer architecture, retained V0.5 manifest schema, source provenance, offline packaging, optional CAD boundary, SVG/glTF identity, binary transport, renderer lifecycle and object-selection contracts.
+See `docs/VIEW_ARCHITECTURE.md` for the V0.10 static/editable viewer architecture, retained V0.5 manifest schema, source provenance, controlled Requirement creation, offline packaging, optional CAD boundary, SVG/glTF identity, binary transport, renderer lifecycle and object-selection contracts.
 
 ## Documentation
 

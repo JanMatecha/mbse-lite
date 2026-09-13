@@ -23,7 +23,7 @@ OBJECT_PREFIXES = {
     "MS": "Milestone",
 }
 
-OBJECT_ID_PATTERN = re.compile(r"^(?P<prefix>[A-Z]+)-[0-9]{3}$")
+OBJECT_ID_PATTERN = re.compile(r"^(?P<prefix>[A-Z]+)-[0-9]{3,}$")
 
 
 @dataclass(frozen=True, slots=True)

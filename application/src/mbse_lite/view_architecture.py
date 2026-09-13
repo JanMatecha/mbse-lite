@@ -79,7 +79,7 @@ def _mermaid_subset(model: Model, object_ids: set[str], relations: list[Relation
         if obj is None:
             continue
         label = obj.attributes.get("Name") or obj.attributes.get("Title") or obj.id
-        safe_id = obj.id.replace("-", "_") if re.fullmatch(r"[A-Z]+-[0-9]{3}", obj.id) else f"node_{index}"
+        safe_id = obj.id.replace("-", "_") if re.fullmatch(r"[A-Z]+-[0-9]{3,}", obj.id) else f"node_{index}"
         node_ids[obj.id] = safe_id
         safe_label = escape(str(label), quote=True).replace("\n", " ")
         safe_object_id = escape(obj.id, quote=True)
