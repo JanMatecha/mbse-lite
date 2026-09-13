@@ -30,6 +30,15 @@ Source: user statements and measurements in this project chat, 2026-09-12 to 202
 - No identifying text was found on the back side of the inspected original laminate board.
 - The user identifies the existing laminate as `Kaindl Classic Touch 37224`. This is a user-provided identification; compatibility of its locking profile with currently sold products has not yet been physically verified.
 
+## FACT — original water/airtightness treatment above upper OSB
+
+Source: user statement in project chat, 2026-09-13.
+
+- The original floor build-up did not include a dedicated waterproof layer above the upper OSB deck.
+- After an earlier repair performed by the previous owner, openings/joints between OSB boards at several locations were covered only with airtight construction tape.
+- The exact tape product and the full extent/continuity of this earlier airtight treatment are currently `TBD`.
+- Whether to add a new dedicated water-resistant or waterproof layer above the upper OSB during the current reconstruction is not yet decided and is tracked as `ISSUE-004`.
+
 ## FACT — photo evidence available in chat
 
 Source: photographs supplied by the user in this project chat.
