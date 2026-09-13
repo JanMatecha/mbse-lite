@@ -6,6 +6,7 @@ The `projects/` directory contains repository-local technical projects, fixtures
 
 - `demo_project/` — stable regression/demo model for application testing; intentionally retained in the older flat layout to exercise backwards compatibility.
 - `garden_tool_shed/` — first real engineering project using separated MBSE and project-management areas; currently retained as an authoritative real project because it is also an integration/regression case for application development.
+- `kitchen_renovation/` — second real engineering project, used both as the authoritative kitchen-renovation workspace during development and as a cross-domain integration case for MBSE Lite.
 - `_template/` — starting template for a new MBSE Lite project root.
 
 ## Current versus target role of this directory
