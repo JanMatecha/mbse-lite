@@ -24,7 +24,8 @@ mbse-lite/
     ├── README.md
     ├── _template/
     ├── demo_project/
-    └── garden_tool_shed/
+    ├── garden_tool_shed/
+    └── kitchen_renovation/
 ```
 
 ## Current versus target project storage
