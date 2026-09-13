@@ -22,6 +22,7 @@ kitchen_renovation/
 ├── README.md
 ├── AGENTS.md
 ├── CHATGPT_ONBOARDING.md
+├── CHATGPT_CHAT_EXTRACTION.md
 ├── mbse/
 │   ├── AGENTS.md
 │   ├── 01_needs.md
@@ -40,9 +41,21 @@ kitchen_renovation/
 
 `mbse/` obsahuje technický model a engineering fakta. `project_management/` obsahuje práci, termíny, vlastníky, milestones a delivery tracking. Engineering fakta se do PM nekopírují; PM na ně odkazuje přes stabilní ID.
 
-## ChatGPT onboarding
+## ChatGPT workflow
 
 `CHATGPT_ONBOARDING.md` obsahuje copy-paste onboarding prompt pro nový ChatGPT chat v GPT projektu **Oprava kuchyně 2026**. Prompt záměrně nese pouze stabilní pracovní pravidla a vždy požaduje znovunačtení aktuálního `main` a aktuálního stavu projektu; průběžná engineering fakta se do promptu nekopírují.
+
+`CHATGPT_CHAT_EXTRACTION.md` obsahuje copy-paste prompt pro už rozjetý chat, ve kterém jsou historické informace o projektu. Workflow nejdřív načte aktuální GitHub jako autoritu, potom projde dostupnou historii chatu, vytěží kandidátní fakta a rozhodnutí, porovná je se současným MBSE, deduplikuje je, bezpečně doplní projekt a následně výsledek znovu načte a validuje.
+
+Použití:
+
+```text
+nový chat
+→ CHATGPT_ONBOARDING.md
+
+rozjetý chat s historickými informacemi
+→ CHATGPT_CHAT_EXTRACTION.md
+```
 
 ## Autorita a budoucí migrace
 
