@@ -21,6 +21,7 @@ Aplikační nedostatky zjištěné během projektu se mají evidovat odděleně 
 kitchen_renovation/
 ├── README.md
 ├── AGENTS.md
+├── CHATGPT_ONBOARDING.md
 ├── mbse/
 │   ├── AGENTS.md
 │   ├── 01_needs.md
@@ -38,6 +39,10 @@ kitchen_renovation/
 ```
 
 `mbse/` obsahuje technický model a engineering fakta. `project_management/` obsahuje práci, termíny, vlastníky, milestones a delivery tracking. Engineering fakta se do PM nekopírují; PM na ně odkazuje přes stabilní ID.
+
+## ChatGPT onboarding
+
+`CHATGPT_ONBOARDING.md` obsahuje copy-paste onboarding prompt pro nový ChatGPT chat v GPT projektu **Oprava kuchyně 2026**. Prompt záměrně nese pouze stabilní pracovní pravidla a vždy požaduje znovunačtení aktuálního `main` a aktuálního stavu projektu; průběžná engineering fakta se do promptu nekopírují.
 
 ## Autorita a budoucí migrace
 
