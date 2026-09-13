@@ -26,6 +26,9 @@ jobs:
       - name: Validate garden-shed integration model and visualization profile
         working-directory: application
         run: uv run mbse-lite validate ../projects/garden_tool_shed
+      - name: Validate kitchen-renovation integration model
+        working-directory: application
+        run: uv run mbse-lite validate ../projects/kitchen_renovation
       - name: Generate garden-shed viewer
         working-directory: application
         run: uv run mbse-lite view ../projects/garden_tool_shed --no-open
