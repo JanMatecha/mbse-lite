@@ -303,15 +303,15 @@ body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, B
 header { position: sticky; top: 0; z-index: 10; display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.4rem; background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand h1 { margin: 0; font-size: 1.15rem; }
 .brand p { margin: .2rem 0 0; color: var(--muted); font-size: .85rem; }
-.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr) 330px; min-height: calc(100vh - 74px); }
-nav { padding: 1rem; border-right: 1px solid var(--line); background: var(--panel); }
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: calc(100vh - 74px); min-height: 620px; }
+nav { padding: 1rem; border-right: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
 .nav-group { margin: 0 0 1rem; }
 .nav-group h2 { margin: 0 0 .35rem; padding: 0 .8rem; color: var(--muted); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
 nav button { width: 100%; border: 0; background: transparent; color: var(--text); text-align: left; padding: .62rem .8rem; margin-bottom: .12rem; border-radius: .5rem; cursor: pointer; font: inherit; }
 nav button:hover, nav button.active { background: var(--accent-soft); color: var(--accent); }
-main { padding: 1.4rem; min-width: 0; }
-aside { padding: 1.2rem; min-width: 0; background: var(--panel); border-left: 1px solid var(--line); }
-aside h2 { font-size: 1rem; margin: 0 0 1rem; }
+main.workspace { display: grid; grid-template-rows: minmax(280px, 43%) minmax(0, 57%); min-width: 0; min-height: 0; overflow: hidden; }
+.workspace-upper { min-width: 0; min-height: 0; padding: 1.4rem; overflow: auto; }
+.selected-object-panel { min-width: 0; min-height: 0; padding: 1.2rem 1.4rem 1.5rem; overflow: auto; background: var(--panel); border-top: 1px solid var(--line); }
 h2 { margin-top: 0; }
 h3 { margin-top: 1.4rem; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8rem; margin: 1rem 0 1.5rem; }
@@ -345,17 +345,32 @@ tbody tr.object-row { cursor: pointer; }
 .severity-ERROR { color: var(--error); font-weight: 700; }
 .severity-WARNING { color: var(--warn); font-weight: 700; }
 .severity-OK { color: var(--ok); font-weight: 700; }
-.detail dl { display: grid; grid-template-columns: minmax(90px, 120px) 1fr; gap: .45rem .7rem; font-size: .9rem; }
-.detail dt { color: var(--muted); }
-.detail dd { margin: 0; overflow-wrap: anywhere; }
-.detail ul { padding-left: 1.2rem; }
-.detail li { margin: .5rem 0; overflow-wrap: anywhere; }
-.attribute-editor { display: flex; gap: .35rem; align-items: center; }
-.attribute-editor input { min-width: 0; width: 100%; }
-.attribute-editor button { border: 1px solid var(--line); border-radius: .45rem; padding: .5rem .65rem; background: var(--accent); color: white; cursor: pointer; }
+.selected-object-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: .85rem; }
+.selected-object-heading { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+.selected-object-heading h2 { margin: 0; font-size: 1.08rem; }
+.selected-object-actions { display: flex; gap: .55rem; }
+.secondary-action { border: 1px solid var(--line); border-radius: .5rem; padding: .5rem .8rem; background: var(--panel); color: var(--text); cursor: pointer; font: inherit; }
+.detail-tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+.detail-tab { border: 0; border-bottom: 2px solid transparent; padding: .55rem .8rem; background: transparent; color: var(--muted); cursor: pointer; font: inherit; }
+.detail-tab.active { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+.object-metadata { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem 1rem; margin: 0 0 1.2rem; }
+.object-metadata div { min-width: 0; }
+.object-metadata dt { margin-bottom: .2rem; color: var(--muted); font-size: .76rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.object-metadata dd { margin: 0; overflow-wrap: anywhere; }
+.attribute-list { display: grid; gap: 1rem; }
+.attribute-block { min-width: 0; }
+.attribute-block h3 { margin: 0 0 .35rem; color: var(--muted); font-size: .82rem; font-weight: 600; letter-spacing: .035em; text-transform: uppercase; }
+.attribute-value { width: 100%; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--bg); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.attribute-value.long-text { min-height: 4.8rem; }
+.attribute-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: start; }
+.attribute-editor input, .attribute-editor textarea { min-width: 0; width: 100%; }
+.attribute-editor textarea { min-height: 7.5rem; resize: vertical; line-height: 1.45; }
+.attribute-editor button { border: 1px solid var(--accent); border-radius: .45rem; padding: .55rem .75rem; background: var(--accent); color: white; cursor: pointer; }
 .attribute-editor button:disabled { cursor: wait; opacity: .65; }
-.edit-feedback { grid-column: 1 / -1; margin: .35rem 0; padding: .55rem .65rem; border-radius: .45rem; background: var(--accent-soft); }
+.edit-feedback { margin: 0 0 1rem; padding: .55rem .65rem; border-radius: .45rem; background: var(--accent-soft); }
 .edit-feedback.error { color: var(--error); }
+.detail-relations { padding-left: 1.2rem; }
+.detail-relations li { margin: .65rem 0; overflow-wrap: anywhere; }
 .graph { background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; padding: 1rem; overflow: auto; margin-bottom: 1rem; }
 .data-block { margin: 1rem 0 1.4rem; }
 .data-block h3 { margin-bottom: .35rem; }
@@ -378,16 +393,20 @@ details { margin-top: 1rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 1050px) {
   .layout { grid-template-columns: 210px minmax(0, 1fr); }
-  aside { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
+  .object-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: 1fr; height: auto; min-height: 0; }
   nav { display: flex; gap: .6rem; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .nav-group { display: flex; gap: .2rem; margin: 0; }
   .nav-group h2 { align-self: center; white-space: nowrap; }
   nav button { width: auto; white-space: nowrap; }
-  aside { grid-column: auto; }
-  .detail dl { grid-template-columns: 1fr; }
+  main.workspace { display: block; overflow: visible; }
+  .workspace-upper, .selected-object-panel { overflow: visible; }
+  .workspace-upper { min-height: 360px; }
+  .object-metadata { grid-template-columns: 1fr; }
+  .attribute-editor { grid-template-columns: 1fr; }
+  .attribute-editor button { justify-self: start; }
 }
 </style>
 <script src="__THREE_ASSET_PATH__"></script>
@@ -420,11 +439,12 @@ window.mbseMermaidReady = Promise.resolve().then(() => {
 </header>
 <div class="layout">
   <nav id="viewNavigation" aria-label="Project views"></nav>
-  <main><div id="viewContent"></div></main>
-  <aside>
-    <h2>Selected object</h2>
-    <div id="objectDetail" class="detail muted">Select an object to inspect its attributes and direct relations.</div>
-  </aside>
+  <main class="workspace">
+    <section class="workspace-upper" aria-label="Active project view"><div id="viewContent"></div></section>
+    <section id="selectedObjectPanel" class="selected-object-panel" aria-label="Selected object">
+      <div id="objectDetail" class="detail muted">Select an object to inspect its attributes and direct relations.</div>
+    </section>
+  </main>
 </div>
 <script>
 __PROVIDER_SOURCE__
@@ -449,6 +469,62 @@ let selectedObjectId = null;
 let activeViewId = null;
 let activeRenderer = null;
 let objectEditFeedback = null;
+let selectedObjectMode = 'read';
+let selectedObjectTab = 'details';
+
+const LONG_TEXT_ATTRIBUTE_NAMES = new Set([
+  'concept', 'requirement', 'decision', 'description', 'notes', 'note',
+  'issue', 'risk', 'rationale', 'justification', 'assumption', 'comment', 'summary'
+]);
+
+function isLongTextAttribute(name, value) {
+  const normalizedName = String(name).trim().toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
+  return String(value ?? '').includes('\\n') || String(value ?? '').length >= 80 ||
+    [...LONG_TEXT_ATTRIBUTE_NAMES].some(candidate =>
+      normalizedName === candidate || normalizedName.endsWith(` ${candidate}`));
+}
+
+function editableAttributesFor(object) {
+  if (!dataProvider.capabilities.write) return [];
+  return Object.keys(object.attributes).filter(key => object.editable_attributes?.includes(key));
+}
+
+function hasUnsavedObjectEdits() {
+  if (selectedObjectMode !== 'edit') return false;
+  return [...document.querySelectorAll('#objectDetail .attribute-editor [data-original-value]')]
+    .some(input => input.value !== input.dataset.originalValue);
+}
+
+function confirmDiscardObjectEdits() {
+  return !hasUnsavedObjectEdits() || window.confirm(
+    'Discard unsaved changes to the selected object?'
+  );
+}
+
+function renderReadAttribute(key, value) {
+  const longTextClass = isLongTextAttribute(key, value) ? ' long-text' : '';
+  const renderedValue = String(value ?? '')
+    ? escapeHtml(value)
+    : '<span class="muted">Empty</span>';
+  return `<section class="attribute-block"><h3>${escapeHtml(key)}</h3><div class="attribute-value${longTextClass}">${renderedValue}</div></section>`;
+}
+
+function renderAttributeEditor(key, value) {
+  const multiline = isLongTextAttribute(key, value);
+  const control = multiline
+    ? `<textarea aria-label="${escapeHtml(key)}" data-original-value="${escapeHtml(value)}">${escapeHtml(value)}</textarea>`
+    : `<input aria-label="${escapeHtml(key)}" data-original-value="${escapeHtml(value)}" value="${escapeHtml(value)}">`;
+  return `<section class="attribute-block"><h3>${escapeHtml(key)}</h3><form class="attribute-editor" data-attribute="${escapeHtml(key)}">${control}<button type="submit">Save</button></form></section>`;
+}
+
+function setSelectedObjectTab(tab) {
+  if (tab === selectedObjectTab) return;
+  if (!confirmDiscardObjectEdits()) return;
+  selectedObjectTab = tab;
+  selectedObjectMode = 'read';
+  objectEditFeedback = null;
+  renderSelectedObject();
+}
 
 function renderSelectedObject() {
   const detail = document.getElementById('objectDetail');
@@ -465,28 +541,60 @@ function renderSelectedObject() {
   }
   detail.classList.remove('muted');
   const direct = relations.filter(rel => rel.source === object.id || rel.target === object.id);
-  const attributes = Object.entries(object.attributes)
-    .map(([key, value]) => {
-      const editable = dataProvider.capabilities.write && object.editable_attributes?.includes(key);
-      if (!editable) return `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd>`;
-      return `<dt>${escapeHtml(key)}</dt><dd><form class="attribute-editor" data-attribute="${escapeHtml(key)}"><input aria-label="${escapeHtml(key)}" value="${escapeHtml(value)}"><button type="submit">Save</button></form></dd>`;
-    }).join('');
+  const editableAttributes = editableAttributesFor(object);
+  const editAction = editableAttributes.length
+    ? `<button class="${selectedObjectMode === 'edit' ? 'secondary-action' : 'primary-action'}" type="button" data-action="${selectedObjectMode === 'edit' ? 'cancel-edit' : 'edit-object'}">${selectedObjectMode === 'edit' ? 'Done' : 'Edit'}</button>`
+    : '';
+  const attributes = Object.entries(object.attributes).map(([key, value]) =>
+    selectedObjectMode === 'edit' && editableAttributes.includes(key)
+      ? renderAttributeEditor(key, value)
+      : renderReadAttribute(key, value)
+  ).join('');
   const relationHtml = direct.length
-    ? `<ul>${direct.map(rel => {
+    ? `<ul class="detail-relations">${direct.map(rel => {
         const otherId = rel.source === object.id ? rel.target : rel.source;
         return `<li><span class="badge">${escapeHtml(rel.area)}</span> ${escapeHtml(rel.source)} — ${escapeHtml(rel.relation)} → ${escapeHtml(rel.target)} <button class="link-button" data-object-id="${escapeHtml(otherId)}">select</button></li>`;
       }).join('')}</ul>`
     : '<p class="muted">No direct relations.</p>';
+  const detailContent = selectedObjectTab === 'relations'
+    ? relationHtml
+    : `<dl class="object-metadata">
+        <div><dt>Stable ID</dt><dd>${escapeHtml(object.id)} <span class="muted">(read-only)</span></dd></div>
+        <div><dt>Type</dt><dd>${escapeHtml(object.type)} <span class="muted">(read-only)</span></dd></div>
+        <div><dt>Source</dt><dd title="${escapeHtml(object.source_file)}">${escapeHtml(object.source_file)} <span class="muted">(read-only)</span></dd></div>
+        <div><dt>Area</dt><dd>${escapeHtml(object.area)}</dd></div>
+      </dl>
+      ${objectEditFeedback ? `<div class="edit-feedback${objectEditFeedback.error ? ' error' : ''}" role="status">${escapeHtml(objectEditFeedback.message)}</div>` : ''}
+      <div class="attribute-list">${attributes}</div>`;
   detail.innerHTML = `
-    <h3>${escapeHtml(object.id)} · ${escapeHtml(object.name)}</h3>
-    <dl><dt>Stable ID</dt><dd>${escapeHtml(object.id)} <span class="muted">(read-only)</span></dd><dt>Area</dt><dd>${escapeHtml(object.area)}</dd><dt>Type</dt><dd>${escapeHtml(object.type)}</dd><dt>Source</dt><dd>${escapeHtml(object.source_file)}</dd>${objectEditFeedback ? `<div class="edit-feedback${objectEditFeedback.error ? ' error' : ''}" role="status">${escapeHtml(objectEditFeedback.message)}</div>` : ''}${attributes}</dl>
-    <h4>Direct relations</h4>${relationHtml}`;
+    <div class="selected-object-header">
+      <div class="selected-object-heading"><h2>Object Details — ${escapeHtml(object.id)}</h2><span class="badge">${escapeHtml(object.type)}</span><span>${escapeHtml(object.name)}</span></div>
+      <div class="selected-object-actions">${selectedObjectTab === 'details' ? editAction : ''}</div>
+    </div>
+    <div class="detail-tabs" role="tablist" aria-label="Selected object sections">
+      <button class="detail-tab${selectedObjectTab === 'details' ? ' active' : ''}" type="button" role="tab" aria-selected="${selectedObjectTab === 'details'}" data-detail-tab="details">Details</button>
+      <button class="detail-tab${selectedObjectTab === 'relations' ? ' active' : ''}" type="button" role="tab" aria-selected="${selectedObjectTab === 'relations'}" data-detail-tab="relations">Relations</button>
+    </div>
+    <div role="tabpanel">${detailContent}</div>`;
   detail.querySelectorAll('[data-object-id]').forEach(button =>
     button.addEventListener('click', () => setSelectedObject(button.dataset.objectId)));
+  detail.querySelectorAll('[data-detail-tab]').forEach(button =>
+    button.addEventListener('click', () => setSelectedObjectTab(button.dataset.detailTab)));
+  detail.querySelector('[data-action="edit-object"]')?.addEventListener('click', () => {
+    selectedObjectMode = 'edit';
+    objectEditFeedback = null;
+    renderSelectedObject();
+  });
+  detail.querySelector('[data-action="cancel-edit"]')?.addEventListener('click', () => {
+    if (!confirmDiscardObjectEdits()) return;
+    selectedObjectMode = 'read';
+    objectEditFeedback = null;
+    renderSelectedObject();
+  });
   detail.querySelectorAll('.attribute-editor').forEach(form => form.addEventListener('submit', async event => {
     event.preventDefault();
     const attribute = form.dataset.attribute;
-    const input = form.querySelector('input');
+    const input = form.querySelector('input, textarea');
     const button = form.querySelector('button');
     const expectedOldValue = object.attributes[attribute];
     button.disabled = true;
@@ -523,7 +631,11 @@ function renderSelectedObject() {
 function setSelectedObject(id) {
   const nextId = id && objects.some(object => object.id === id) ? id : null;
   if (nextId === selectedObjectId) return;
+  if (!confirmDiscardObjectEdits()) return;
   selectedObjectId = nextId;
+  selectedObjectMode = 'read';
+  selectedObjectTab = 'details';
+  objectEditFeedback = null;
   renderSelectedObject();
   activeRenderer?.onSelectionChanged?.(selectedObjectId);
   window.dispatchEvent(new CustomEvent('mbse-selection-change', {

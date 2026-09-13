@@ -516,6 +516,8 @@ def test_http_provider_uses_api_command_and_preserves_selection_after_refresh(tm
     assert "applyProjectSnapshot(snapshot, object.id)" in html
     assert "The value changed since this page was loaded. Reloaded current value." in html
     assert "objectEditFeedback = { message: 'Saved'" in html
+    assert "selectedObjectMode === 'edit' && editableAttributes.includes(key)" in html
+    assert "form.querySelector('input, textarea')" in html
     assert "class EmbeddedDataProvider" not in html
 
 

@@ -330,6 +330,12 @@ read-only                            read/write through commands
 
 `GET /api/project` reloads Markdown and returns the current manifest, renderer-neutral model, view assets, asset errors and `{read: true, write: true}` capabilities. `POST /api/object-attribute` accepts exactly `object_id`, `attribute`, `value` and `expected_old_value`. It resolves the target from provenance, invokes the command layer, validates and atomically commits or rolls back, then returns the refreshed snapshot. Conflicts return HTTP 409 with expected and actual values; malformed requests, unknown objects and domain rejections use deterministic JSON errors without exposing tracebacks.
 
+### Stacked selected-object reader and editor
+
+The desktop shell keeps the navigation sidebar and divides the remaining workspace vertically: the active object, diagram or 3D view occupies the upper region, while the shared selected-object panel occupies the wider lower region. The lower panel defaults to a document-like Details tab with stable ID, type and source presented as read-only metadata and object attributes rendered as wrapped text blocks. Direct relations reuse the existing shared relation rendering in a separate Relations tab. Narrow windows retain this stacked order and use vertical page scrolling instead of restoring a narrow right-hand inspector.
+
+Static and HTTP modes render the same reader. Static mode advertises no write capability and therefore shows no Edit action. In HTTP mode an Edit action appears only when the selected object has attributes included in the snapshot's `editable_attributes`. Short values use single-line controls; long or semantically textual values use full-width, vertically resizable textareas. Each field retains the existing scalar Save command, optimistic old-value check and authoritative snapshot refresh; the viewer does not add a batch-update API. Changing the selection or selected-object tab while a control differs from its loaded value requires explicit confirmation before discarding that browser input.
+
 ### Controlled Requirement creation
 
 ```text

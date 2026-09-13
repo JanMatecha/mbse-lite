@@ -73,6 +73,7 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-067 | Model objects shall be able to retain explicit provenance/reference links to supporting artifacts outside the MBSE workspace without copying those artifacts into the authoritative model or implying write permission to the source. | Guiding |
 | APP-REQ-068 | Controlled authoring shall evolve toward semantic changesets that can group related mutations and retain actor/client, reason, source evidence, before/after diff, validation outcome and commit result while Markdown remains the authoritative model. | Guiding |
 | APP-REQ-069 | Migration of an authoritative project root shall support deterministic pre-switch validation of stable project identity, model objects, relations, validation results and retained external provenance references so authority can move once without creating a long-running two-master synchronization model. | Guiding |
+| APP-REQ-070 | The viewer shall present the shared selected object in a full-workspace-width stacked reader below the active view, default to read mode, expose editing only for server-advertised writable scalar attributes, and protect unsaved browser input when selection changes. | Implemented |
 
 ## Current and target storage note
 

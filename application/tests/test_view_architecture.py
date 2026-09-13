@@ -130,6 +130,39 @@ def test_static_viewer_bootstraps_through_read_only_embedded_provider(tmp_path):
     )
 
 
+def test_selected_object_uses_stacked_read_first_layout(tmp_path):
+    output = tmp_path / "index.html"
+
+    export_viewer(load_model(demo_project()), output, project_name="Demo Project")
+
+    html = output.read_text(encoding="utf-8")
+    assert ".layout { display: grid; grid-template-columns: 220px minmax(0, 1fr);" in html
+    assert "grid-template-columns: 220px minmax(0, 1fr) 330px" not in html
+    assert '<main class="workspace">' in html
+    assert "grid-template-rows: minmax(280px, 43%) minmax(0, 57%)" in html
+    assert html.index('class="workspace-upper"') < html.index('id="selectedObjectPanel"')
+    assert "let selectedObjectMode = 'read';" in html
+    assert "function renderReadAttribute(key, value)" in html
+    assert 'data-detail-tab="details">Details</button>' in html
+    assert 'data-detail-tab="relations">Relations</button>' in html
+    assert "if (!dataProvider.capabilities.write) return [];" in html
+    assert "object.editable_attributes?.includes(key)" in html
+    assert "isLongTextAttribute(key, value)" in html
+    assert '<textarea aria-label="${escapeHtml(key)}"' in html
+    assert "window.confirm(" in html
+    assert "Discard unsaved changes to the selected object?" in html
+
+
+def test_generated_viewer_escapes_javascript_newline_literal(tmp_path):
+    output = tmp_path / "index.html"
+
+    export_viewer(load_model(demo_project()), output, project_name="Demo Project")
+
+    html = output.read_text(encoding="utf-8")
+    assert "String(value ?? '').includes('\\n')" in html
+    assert "String(value ?? '').includes('\n')" not in html
+
+
 def test_viewer_bundle_contains_pinned_offline_browser_dependencies(tmp_path):
     output = tmp_path / "index.html"
 
