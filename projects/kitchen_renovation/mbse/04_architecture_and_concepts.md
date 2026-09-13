@@ -19,6 +19,7 @@
 | CON-001 | Use a currently available laminate product whose locking profile physically mates with the retained existing laminate. Decorative appearance may differ. | PROPOSAL |
 | CON-002 | Seal upper-OSB joints with an airtight construction tape such as ISOCELL AIRSTOP FLEX 50 mm. This was discussed as an airtightness measure, not confirmed as a waterproofing layer. | PROPOSAL |
 | CON-003 | Add a dedicated water-resistant/waterproof protection layer above the OSB before the underlay and laminate. No product/system has been selected. | PROPOSAL |
+| CON-004 | Concentrate the floor-to-wall service transitions into one framed and inspectable service zone near the existing wall location, rather than leaving multiple uncontrolled holes through the finished floor. The concept is to provide a defined opening/raised service upstand with separate protected routes for plumbing/drainage and electrical conduits, individual flexible sealing collars or grommets where services cross the air/water-control layer, and removable access from the cabinet/plinth side. Exact geometry, materials and sealing system are TBD. | PROPOSAL |
 
 ## Decisions
 
