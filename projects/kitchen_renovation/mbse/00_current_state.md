@@ -30,6 +30,17 @@ Source: user statements and measurements in this project chat, 2026-09-12 to 202
 - No identifying text was found on the back side of the inspected original laminate board.
 - The user identifies the existing laminate as `Kaindl Classic Touch 37224`. This is a user-provided identification; compatibility of its locking profile with currently sold products has not yet been physically verified.
 
+## FACT — upper OSB condition and replacement thickness
+
+Source: user statement in project chat, 2026-09-13.
+
+- Some of the original upper OSB boards are visibly swollen after the water event.
+- Candidate replacement OSB boards are reported to be approximately 2 mm thinner than the existing boards, so replacing only part of the deck would create a local level step unless compensated.
+- The user observed that an earlier repair performed by the previous owner already contains local level steps between OSB boards.
+- According to the user's observation, those earlier level differences did not create a noticeable problem after the impact-sound underlay and laminate floating floor were installed above them.
+- Whether to reuse the dried original OSB boards or replace them with new boards is not yet decided and is tracked as `ISSUE-006`.
+- Biological contamination such as mould inside the original OSB has not been confirmed; concern about possible hidden contamination is treated as a risk/decision criterion, not as an established fact.
+
 ## FACT — original water/airtightness treatment above upper OSB
 
 Source: user statement in project chat, 2026-09-13.
