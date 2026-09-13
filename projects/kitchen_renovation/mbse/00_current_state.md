@@ -37,6 +37,17 @@ Source: photographs supplied by the user in this project chat.
 - Photographs document progressive dismantling of the kitchen/floor, opened OSB floor areas, insulation removal, exposed timber floor structure and installation/service penetrations.
 - Photographs show visible colour/staining differences on some exposed timber and board surfaces. The photographs alone do not establish moisture percentage, biological growth, structural degradation or the exact source of the original water event.
 
+### FACT — service penetration area near wall
+
+Source: user-supplied photograph in project chat, 2026-09-13.
+
+- One exposed installation area near the wall contains several services rising from or passing through the floor cavity toward the kitchen installation zone.
+- The photograph visibly shows a larger vertical waste/drain pipe, additional smaller pipework/fittings and multiple flexible conduits/cable routes in the same local area.
+- The services are spatially concentrated in one zone rather than distributed across the entire repaired floor area.
+- The upper OSB floor deck is currently open around this installation zone, so the final floor-to-service transition detail has not yet been reconstructed.
+- Exact service identities, diameters, materials, required clearances and final connection points are not confirmed from this photograph alone and remain `TBD` unless separately documented.
+- The final routing, sealing, mechanical protection, separation and inspection/access solution for this installation zone remains unresolved and is tracked as `ISSUE-005`.
+
 ## OPEN ISSUE
 
 The exact original floor build-up, all original insulation types and their locations have not yet been documented sufficiently to treat the complete original assembly as a confirmed engineering fact.
