@@ -1,6 +1,6 @@
 # MBSE Lite Application Requirements
 
-Application requirements are intentionally separated from the engineering requirements of projects under `../projects/`.
+Application requirements are intentionally separated from the engineering requirements of technical projects, whether those projects are currently stored under `../projects/` or at an external project root.
 
 | ID | Requirement | Status |
 |---|---|---|
@@ -51,7 +51,7 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-045 | CadQuery and OCP shall execute only in an isolated worker process; the CLI, public CAD API and any future long-running application process shall use a parent-side runner that does not import the CAD backend. | Implemented |
 | APP-REQ-046 | A CAD worker shall atomically publish a job-specific completion record only after all required artifacts exist and footprint, authority, provenance and stable-identity checks pass; the parent shall independently validate that evidence. | Implemented |
 | APP-REQ-047 | A nonzero CAD-worker exit shall fail except on Windows for the exact `0xC0000374` heap-corruption status after a fully valid completion record and artifacts, which may succeed with a warning only as a defensive fallback; `0xC0000005` shall always fail. | Implemented |
-| APP-REQ-048 | A future local serve mode shall route every CAD operation through the isolated parent runner and shall not import CadQuery/OCP into the server process. | Guiding |
+| APP-REQ-048 | Any future CAD operation exposed through local serve mode shall route through the isolated parent runner and shall not import CadQuery/OCP into the server process. | Guiding |
 | APP-REQ-049 | After successful atomic completion publication and explicit stdout/stderr flushing, the isolated CAD worker shall terminate with `os._exit(0)` before CadQuery/OCP interpreter teardown; no failure path or parent/server process shall use that controlled success exit. | Implemented |
 | APP-REQ-050 | A CadQuery GLB conceptual preview shall map the CAD job's explicit stable component identities to matching `node.name` and `node.extras.mbse_id` values without changing geometry, and worker and parent validation shall reject incomplete, conflicting or artifact-inconsistent identity evidence. | Implemented |
 | APP-REQ-051 | The static viewer may explicitly consume an already completed CadQuery conceptual GLB only after dependency-free validation of completion, artifact, authority, scope, unit and `extras.mbse_id` evidence; the default custom GLB path shall remain unchanged and shall not import or invoke CadQuery/OCP. | Implemented |
@@ -65,6 +65,20 @@ Application requirements are intentionally separated from the engineering requir
 | APP-REQ-059 | Requirement creation shall allocate the greatest current numeric REQ suffix plus one with at least three-digit padding, serialize all server mutations, reject stale deterministic table revisions, and validate before and after atomic commit with rollback. | Implemented |
 | APP-REQ-060 | Editable snapshots shall advertise dynamic Requirement-creation schema metadata without absolute filesystem paths; the HTTP provider shall expose creation only when enabled and shall replace browser state with the authoritative returned snapshot. | Implemented |
 | APP-REQ-061 | V0.10 shall create Requirements only, insert exactly one safely encoded Markdown row, assign normal provenance, create no relations, invoke no CAD operation, and leave the static embedded viewer read-only without creation controls. | Implemented |
+| APP-REQ-062 | Every project-oriented command and application boundary shall accept a project root independently of whether that root is inside the MBSE Lite source repository; reusable behavior shall not depend on `../projects/`, an absolute path, or a fixed parent-directory name. | Guiding |
+| APP-REQ-063 | A project shall support a stable project-level `project_id` that is distinct from model-object IDs and remains unchanged when the project root is moved or renamed. | Guiding |
+| APP-REQ-064 | The project contract shall support explicit authoritative model roots so host/workspace metadata such as `00_INFO/` and other non-model Markdown can coexist under the supplied project root without being parsed as MBSE objects or relations. | Guiding |
+| APP-REQ-065 | The application shall support an embedded workspace boundary such as a host-named `XX_MBSE` directory without deriving project identity or behavior from the host's numbering, directory name or absolute path. | Guiding |
+| APP-REQ-066 | A project may declare external context outside its writable root for read/reference use; controlled write operations shall remain confined to the MBSE project workspace unless an explicit separate write authority is granted. | Guiding |
+| APP-REQ-067 | Model objects shall be able to retain explicit provenance/reference links to supporting artifacts outside the MBSE workspace without copying those artifacts into the authoritative model or implying write permission to the source. | Guiding |
+| APP-REQ-068 | Controlled authoring shall evolve toward semantic changesets that can group related mutations and retain actor/client, reason, source evidence, before/after diff, validation outcome and commit result while Markdown remains the authoritative model. | Guiding |
+| APP-REQ-069 | Migration of an authoritative project root shall support deterministic pre-switch validation of stable project identity, model objects, relations, validation results and retained external provenance references so authority can move once without creating a long-running two-master synchronization model. | Guiding |
+
+## Current and target storage note
+
+Requirements APP-REQ-062 through APP-REQ-069 describe the target portable project-workspace architecture. They do not claim that V0.10 already supports stable project identity, explicit model-root filtering, external context or semantic changesets.
+
+Repository-local projects remain authoritative until an explicit validated migration is performed. The target architecture is a one-time authority switch, not bidirectional synchronization between two masters.
 
 ## Rule for adding requirements
 
